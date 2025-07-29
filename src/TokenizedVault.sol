@@ -29,8 +29,13 @@ abstract contract ERC4626Fees is ERC4626 {
     address public treasury;
     address public koKaia;
     address public vault;
-    mapping(address => uint256) public deposits;
     uint256 public maxDeposit = 100 * 1e18;
+
+    struct DepositInfo {
+        uint256 amount;
+        uint256 timestamp;
+    }
+    mapping(address => DepositInfo) public deposits;
 
     // Testnet
     address constant TOKEN_A = 0x9a93e2fcDEBE43d0f8205D1cd255D709B7598317; // wKoKAIA
@@ -94,7 +99,7 @@ abstract contract ERC4626Fees is ERC4626 {
         uint256 shares
     ) internal virtual override {
         require(
-            deposits[caller] + assets <= maxDeposit,
+            deposits[caller].amount + assets <= maxDeposit,
             "Max. amount of deposit is over."
         );
         super._deposit(caller, receiver, assets, shares);
@@ -107,7 +112,8 @@ abstract contract ERC4626Fees is ERC4626 {
         // Stake KAIA to earn
         IKoKaia(koKaia).stake{value: amount}();
 
-        deposits[caller] = deposits[caller] + assets;
+        deposits[caller].amount = deposits[caller].amount + assets;
+        deposits[caller].timestamp = block.timestamp;
     }
 
     /// @dev Send exit fee to {_exitFeeRecipient}. See {IERC4626-_deposit}.
@@ -119,7 +125,7 @@ abstract contract ERC4626Fees is ERC4626 {
         uint256 shares
     ) internal virtual override {
         require(
-            assets <= deposits[caller],
+            assets <= deposits[caller].amount,
             "Can not withdraw more than deposit"
         );
 
@@ -146,8 +152,9 @@ abstract contract ERC4626Fees is ERC4626 {
         uint256 fee = 0;
         uint256 principalShare = assets;
         // assets = principalShare + profitShare
-        if (max >= deposits[caller]) {
-            uint256 profitShare = (assets * (max - deposits[caller])) / max; // Profit included in assets
+        if (max >= deposits[caller].amount) {
+            uint256 profitShare = (assets * (max - deposits[caller].amount)) /
+                max; // Profit included in assets
 
             fee = _feeOnTotal(profitShare, _exitFeeBasisPoints()); // 10% of Profit
             principalShare = assets - profitShare; // Principle included in assets
@@ -161,7 +168,8 @@ abstract contract ERC4626Fees is ERC4626 {
             SafeERC20.safeTransfer(IERC20(asset()), recipient, fee);
         }
 
-        deposits[caller] = deposits[caller] - principalShare;
+        deposits[caller].amount = deposits[caller].amount - principalShare;
+        deposits[caller].timestamp = block.timestamp;
     }
 
     // === Fee configuration ===
@@ -304,9 +312,9 @@ abstract contract ERC4626Fees is ERC4626 {
             );
     }
 
-    function setMaxDeposit(uint256 newMax) public onlyOwner {
+    function setMaxDeposit(uint256 newMax) public virtual {
         maxDeposit = newMax;
-        MaxDeposit(newMax);
+        emit MaxDeposit(newMax);
     }
 }
 
@@ -403,6 +411,10 @@ contract TokenizedVault is ERC4626Fees, Ownable(msg.sender) {
                 limits,
                 block.timestamp + 600
             );
+    }
+
+    function setMaxDeposit(uint256 newMax) public override onlyOwner {
+        super.setMaxDeposit(newMax);
     }
 
     //  function swapTokenIn(uint256 amountIn, uint256 minAmountOut) external returns (uint256 amountOut) {
