@@ -299,13 +299,13 @@ abstract contract ERC4626FeesUpgradeable is ERC4626Upgradeable {
     }
 }
 
-contract TokenizedVaultUpgradeable is
+contract TokenizedVaultUpgradeableV2 is
     ERC4626FeesUpgradeable,
     OwnableUpgradeable
 {
     using Math for uint256;
     address payable public vaultOwner;
-    int constant VERSION = 1;
+    int constant VERSION = 2;
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
