@@ -10,4 +10,4 @@ const RPC_URLS = {
   [ChainId.KAIROS]: "https://public-en-kairos.node.kaia.io",
 };
 
-module.exports = { ChainId, RPC_URLSr };
+module.exports = { ChainId, RPC_URLS };
