@@ -58,6 +58,8 @@ abstract contract ERC4626FeesUpgradeable is ERC4626Upgradeable {
     event BatchSwap(int256 indexed, int256 indexed, int256 indexed);
     event Fee(uint256 indexed, uint256 indexed);
     event MaxDeposit(uint256 indexed);
+    event BasisPointsFees(uint256 indexed);
+    event InvestRatio(uint256 indexed);
 
     function __ERC4626Fees_init(
         uint256 _basisPointsFees,
@@ -308,9 +310,19 @@ abstract contract ERC4626FeesUpgradeable is ERC4626Upgradeable {
             );
     }
 
-    function setMaxDeposit(uint256 newMax) public virtual {
-        maxDeposit = newMax;
-        emit MaxDeposit(newMax);
+    function setMaxDeposit(uint256 newValue) public virtual {
+        maxDeposit = newValue;
+        emit MaxDeposit(newValue);
+    }
+
+    function setBasisPointsFees(uint256 newValue) public virtual {
+        basisPointsFees = newValue; // 100 = 1%
+        emit BasisPointsFees(newValue);
+    }
+
+    function setInvestRatio(uint256 newValue) public virtual {
+        investRatio = newValue;
+        emit InvestRatio(newValue);
     }
 }
 
@@ -425,8 +437,16 @@ contract TokenizedVaultUpgradeableV2 is
             );
     }
 
-    function setMaxDeposit(uint256 newMax) public override onlyOwner {
-        super.setMaxDeposit(newMax);
+    function setMaxDeposit(uint256 newValue) public override onlyOwner {
+        super.setMaxDeposit(newValue);
+    }
+
+    function setBasisPointsFees(uint256 newValue) public override onlyOwner {
+        super.setBasisPointsFees(newValue);
+    }
+
+    function setInvestRatio(uint256 newValue) public override onlyOwner {
+        super.setInvestRatio(newValue);
     }
 
     function version() public view returns (int) {

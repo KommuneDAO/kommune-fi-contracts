@@ -58,6 +58,8 @@ abstract contract ERC4626Fees is ERC4626 {
     event BatchSwap(int256 indexed, int256 indexed, int256 indexed);
     event Fee(uint256 indexed, uint256 indexed);
     event MaxDeposit(uint256 indexed);
+    event BasisPointsFees(uint256 indexed);
+    event InvestRatio(uint256 indexed);
 
     constructor(
         uint256 _basisPointsFees,
@@ -312,9 +314,19 @@ abstract contract ERC4626Fees is ERC4626 {
             );
     }
 
-    function setMaxDeposit(uint256 newMax) public virtual {
-        maxDeposit = newMax;
-        emit MaxDeposit(newMax);
+    function setMaxDeposit(uint256 newValue) public virtual {
+        maxDeposit = newValue;
+        emit MaxDeposit(newValue);
+    }
+
+    function setBasisPointsFees(uint256 newValue) public virtual {
+        basisPointsFees = newValue; // 100 = 1%
+        emit BasisPointsFees(newValue);
+    }
+
+    function setInvestRatio(uint256 newValue) public virtual {
+        investRatio = newValue;
+        emit InvestRatio(newValue);
     }
 }
 
@@ -413,8 +425,16 @@ contract TokenizedVault is ERC4626Fees, Ownable(msg.sender) {
             );
     }
 
-    function setMaxDeposit(uint256 newMax) public override onlyOwner {
-        super.setMaxDeposit(newMax);
+    function setMaxDeposit(uint256 newValue) public override onlyOwner {
+        super.setMaxDeposit(newValue);
+    }
+
+    function setBasisPointsFees(uint256 newValue) public override onlyOwner {
+        super.setBasisPointsFees(newValue);
+    }
+
+    function setInvestRatio(uint256 newValue) public override onlyOwner {
+        super.setInvestRatio(newValue);
     }
 
     //  function swapTokenIn(uint256 amountIn, uint256 minAmountOut) external returns (uint256 amountOut) {
