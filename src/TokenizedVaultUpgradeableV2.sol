@@ -30,6 +30,7 @@ abstract contract ERC4626FeesUpgradeable is ERC4626Upgradeable {
     address public koKaia;
     address public vault;
     mapping(address => uint256) public deposits;
+    uint256 public maxDeposit = 100 * 1e18;
 
     // Testnet
     address constant TOKEN_A = 0x9a93e2fcDEBE43d0f8205D1cd255D709B7598317; // wKoKAIA
@@ -51,6 +52,7 @@ abstract contract ERC4626FeesUpgradeable is ERC4626Upgradeable {
 
     event BatchSwap(int256 indexed, int256 indexed, int256 indexed);
     event Fee(uint256 indexed, uint256 indexed);
+    event MaxDeposit(uint256 indexed);
 
     function __ERC4626Fees_init(
         uint256 _basisPointsFees,
@@ -296,6 +298,11 @@ abstract contract ERC4626FeesUpgradeable is ERC4626Upgradeable {
                 limits,
                 block.timestamp + 600
             );
+    }
+
+    function setMaxDeposit(uint256 newMax) public onlyOwner {
+        maxDeposit = newMax;
+        MaxDeposit(newMax);
     }
 }
 
