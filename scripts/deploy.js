@@ -1,28 +1,29 @@
 const { ethers, upgrades, network } = require("hardhat");
 const { RPC_URLS } = require("../config/config");
 const fs = require("fs");
+const {
+  contracts,
+  basisPointsFees,
+  investRatio,
+} = require("../config/constants");
 
 require("dotenv").config();
 
 const networkName = hre.network.name;
-console.log("!! start deploying to : ", networkName);
+const chainId = networkName === "kaia" ? 8217 : 1001;
+console.log("!! start deploying to : ", networkName, chainId);
 
-const provider = new ethers.JsonRpcProvider(
-  RPC_URLS[networkName === "kaia" ? 8217 : 1001],
-);
+const provider = new ethers.JsonRpcProvider(RPC_URLS[chainId]);
 const wallet = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
 const admin = wallet.address;
 console.log("");
 console.log("!! signer addr =", wallet.address);
 console.log("");
 
-// Constructor Arguments for Kaia Mainnet
-const asset = "0xdec2cc84f0a37ef917f63212fe8ba7494b0e4b15"; // WKaia 주소
-const basisPointsFees = 1000; // 10%
-const investRatio = 9000; // 90%
-const treasury = "0xDdb24eCaF1cCeF3dd3BcF2e2b93A231e809B89B0"; // Treasury 주소
-const koKaia = "0xa1338309658d3da331c747518d0bb414031f22fd"; // KoKaia 컨트랙 주소
-const vault = "0xbF1f3C783C8f6f4582c0a0508f2790b4E2C2E581"; // Kommune-Fi vault 컨트랙 주소
+const asset = contracts.wkaia[chainId]; // WKaia 주소
+const koKaia = contracts.koKaia[chainId]; // KoKaia 컨트랙 주소
+const vault = contracts.vault[chainId]; // Kommune-Fi vault 컨트랙 주소
+const treasury = contracts.treasury[chainId]; // Treasury 주소
 
 async function main() {
   // 1. deploy contract
