@@ -37,29 +37,47 @@ abstract contract ERC4626Fees is ERC4626 {
     }
     mapping(address => DepositInfo) public deposits;
 
-    // Testnet
-    address constant TOKEN_A = 0x9a93e2fcDEBE43d0f8205D1cd255D709B7598317; // wKoKAIA
-    address constant TOKEN_B = 0x985acD34f36D91768aD4b0cB295Aa919A7ABDb27; // 5LST
-    address constant TOKEN_C = 0x0339d5Eb6D195Ba90B13ed1BCeAa97EbD198b106; // WKAIA
-    bytes32 constant POOL1 =
-        0x8193fe745f2784b1f55e51f71145d2b8b0739b8100020000000000000000000e; // LST Pool
-    bytes32 constant POOL2 =
-        0x0c5da2fa11fc2d7eee16c06740072e3c5e1bb4a7000200000000000000000001; // WKAIA-5LST Pool
-
-    // Mainnet
-    //    address constant TOKEN_A = 0xdec2cc84f0a37ef917f63212fe8ba7494b0e4b15; // wKoKAIA
-    //    address constant TOKEN_B = 0xa006e8df6a3cbc66d4d707c97a9fdaf026096487; // 5LST
-    //    address constant TOKEN_C = 0x19aac5f612f524b754ca7e7c41cbfa2e981a4432; // WKAIA
-    //    bytes32 constant POOL1 =
-    //        0xa006e8df6a3cbc66d4d707c97a9fdaf026096487000000000000000000000000; // LST Pool
-    //    bytes32 constant POOL2 =
-    //        0x17f3eda2bf1aa1e7983906e675ac9a2ab6bc57de000000000000000000000001; // WKAIA-5LST Pool
-
     event BatchSwap(int256 indexed, int256 indexed, int256 indexed);
     event Fee(uint256 indexed, uint256 indexed);
     event MaxDeposit(uint256 indexed);
     event BasisPointsFees(uint256 indexed);
     event InvestRatio(uint256 indexed);
+
+    function getSwapToken(int index) public view returns (address) {
+        uint256 id;
+        assembly {
+            id := chainid()
+        }
+        if (id == 8217) {
+            if (index == 1) return 0xdEC2Cc84f0a37Ef917f63212FE8ba7494b0E4B15; // wKoKAIA
+            if (index == 2) return 0xA006e8dF6A3CBc66D4D707C97A9FDAf026096487; // 5LST
+            return 0x19Aac5f612f524B754CA7e7c41cbFa2E981A4432; // WKAIA
+        } else {
+            if (index == 1) return 0x9a93e2fcDEBE43d0f8205D1cd255D709B7598317;
+            if (index == 2) return 0x985acD34f36D91768aD4b0cB295Aa919A7ABDb27;
+            return 0x0339d5Eb6D195Ba90B13ed1BCeAa97EbD198b106;
+        }
+    }
+
+    function getSwapPool(int index) public view returns (bytes32) {
+        uint256 id;
+        assembly {
+            id := chainid()
+        }
+        if (id == 8217) {
+            if (index == 1)
+                return
+                    0xa006e8df6a3cbc66d4d707c97a9fdaf026096487000000000000000000000000; // LST Pool
+            return
+                0x17f3eda2bf1aa1e7983906e675ac9a2ab6bc57de000000000000000000000001; // WKAIA-5LST Pool
+        } else {
+            if (index == 1)
+                return
+                    0x8193fe745f2784b1f55e51f71145d2b8b0739b8100020000000000000000000e;
+            return
+                0x0c5da2fa11fc2d7eee16c06740072e3c5e1bb4a7000200000000000000000001;
+        }
+    }
 
     constructor(
         uint256 _basisPointsFees,
@@ -249,30 +267,30 @@ abstract contract ERC4626Fees is ERC4626 {
         uint256 balKaia = address(this).balance;
         uint256 balWKaia = IERC20(asset()).balanceOf(address(this));
         uint256 balKoKaia = IERC20(koKaia).balanceOf(address(this));
-        uint256 balWKoKaia = IERC20(TOKEN_A).balanceOf(address(this));
+        uint256 balWKoKaia = IERC20(getSwapToken(1)).balanceOf(address(this));
         return balKaia + balWKaia + balKoKaia + balWKoKaia;
     }
 
     function swap(uint256 amountIn) private returns (int256[] memory) {
         // wrap KoKAIA
         uint256 amount = amountIn + _portionOnRaw(amountIn, 1500);
-        IERC20(koKaia).approve(TOKEN_A, amount);
-        IWKoKaia(TOKEN_A).wrap(amount);
+        IERC20(koKaia).approve(getSwapToken(1), amount);
+        IWKoKaia(getSwapToken(1)).wrap(amount);
 
         // approve
-        IERC20(TOKEN_A).approve(address(vault), amountIn);
+        IERC20(getSwapToken(1)).approve(address(vault), amountIn);
 
         // Prepare assets (as IAsset)
         IAsset[] memory assets = new IAsset[](3);
-        assets[0] = IAsset(TOKEN_A);
-        assets[1] = IAsset(TOKEN_B);
-        assets[2] = IAsset(TOKEN_C);
+        assets[0] = IAsset(getSwapToken(1));
+        assets[1] = IAsset(getSwapToken(2));
+        assets[2] = IAsset(getSwapToken(3));
 
         // Set up BatchSwapStep[]
         IBalancerVault.BatchSwapStep[]
             memory steps = new IBalancerVault.BatchSwapStep[](2);
         steps[0] = IBalancerVault.BatchSwapStep({
-            poolId: POOL1,
+            poolId: getSwapPool(1),
             assetInIndex: 0,
             assetOutIndex: 1,
             amount: amountIn,
@@ -280,7 +298,7 @@ abstract contract ERC4626Fees is ERC4626 {
         });
 
         steps[1] = IBalancerVault.BatchSwapStep({
-            poolId: POOL2,
+            poolId: getSwapPool(2),
             assetInIndex: 1,
             assetOutIndex: 2,
             amount: 0, // for multihop, set 0
@@ -362,27 +380,27 @@ contract TokenizedVault is ERC4626Fees, Ownable(msg.sender) {
         // wrap KoKAIA
         uint256 amount = amountIn +
             amountIn.mulDiv(1500, 10000, Math.Rounding.Ceil);
-        IERC20(koKaia).approve(TOKEN_A, amount);
-        IWKoKaia(TOKEN_A).wrap(amount);
+        IERC20(koKaia).approve(getSwapToken(1), amount);
+        IWKoKaia(getSwapToken(1)).wrap(amount);
 
         // approve
-        IERC20(TOKEN_A).approve(address(vault), amountIn);
+        IERC20(getSwapToken(1)).approve(address(vault), amountIn);
 
         // Prepare assets (as IAsset)
         IAsset[] memory assets = new IAsset[](3);
         //        for (uint i = 0; i < 3; i++) {
         //            assets[i] = IAsset(tokens[i]);
         //        }
-        assets[0] = IAsset(TOKEN_A);
-        assets[1] = IAsset(TOKEN_B);
-        assets[2] = IAsset(TOKEN_C);
+        assets[0] = IAsset(getSwapToken(1));
+        assets[1] = IAsset(getSwapToken(2));
+        assets[2] = IAsset(getSwapToken(3));
 
         // Set up BatchSwapStep[]
         IBalancerVault.BatchSwapStep[]
             memory steps = new IBalancerVault.BatchSwapStep[](2);
         steps[0] = IBalancerVault.BatchSwapStep({
             //            poolId: poolIds[0],
-            poolId: POOL1,
+            poolId: getSwapPool(1),
             assetInIndex: 0,
             assetOutIndex: 1,
             amount: amountIn,
@@ -391,7 +409,7 @@ contract TokenizedVault is ERC4626Fees, Ownable(msg.sender) {
 
         steps[1] = IBalancerVault.BatchSwapStep({
             //            poolId: poolIds[1],
-            poolId: POOL2,
+            poolId: getSwapPool(2),
             assetInIndex: 1,
             assetOutIndex: 2,
             amount: 0, // for multihop, set 0
