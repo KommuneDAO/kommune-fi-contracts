@@ -29,7 +29,7 @@ abstract contract ERC4626FeesUpgradeable is ERC4626Upgradeable {
     address public treasury;
     address public koKaia;
     address public vault;
-    uint256 public maxDeposit = 100 * 1e18;
+    uint256 public maxDeposit;
 
     struct DepositInfo {
         uint256 amount;
@@ -91,6 +91,7 @@ abstract contract ERC4626FeesUpgradeable is ERC4626Upgradeable {
         treasury = _treasury;
         koKaia = _koKaia;
         vault = _vault;
+        maxDeposit = 100 * 1e18;
     }
 
     // === Overrides ===
