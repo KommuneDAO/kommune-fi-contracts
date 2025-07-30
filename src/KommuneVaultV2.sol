@@ -29,7 +29,7 @@ abstract contract ERC4626FeesUpgradeable is ERC4626Upgradeable {
     address public treasury;
     address public koKaia;
     address public vault;
-    uint256 public maxDeposit;
+    uint256 public depositLimit;
 
     struct DepositInfo {
         uint256 amount;
@@ -91,7 +91,7 @@ abstract contract ERC4626FeesUpgradeable is ERC4626Upgradeable {
         treasury = _treasury;
         koKaia = _koKaia;
         vault = _vault;
-        maxDeposit = 100 * 1e18;
+        depositLimit = 100 * 1e18;
     }
 
     // === Overrides ===
@@ -120,7 +120,7 @@ abstract contract ERC4626FeesUpgradeable is ERC4626Upgradeable {
         uint256 shares
     ) internal virtual override {
         require(
-            deposits[caller].amount + assets <= maxDeposit,
+            deposits[caller].amount + assets <= depositLimit,
             "Max. amount of deposit is over."
         );
         super._deposit(caller, receiver, assets, shares);
@@ -145,11 +145,6 @@ abstract contract ERC4626FeesUpgradeable is ERC4626Upgradeable {
         uint256 assets,
         uint256 shares
     ) internal virtual override {
-        require(
-            assets <= deposits[caller].amount,
-            "Can not withdraw more than deposit"
-        );
-
         address recipient = _exitFeeRecipient();
         uint256 max = maxWithdraw(caller);
 
@@ -189,7 +184,8 @@ abstract contract ERC4626FeesUpgradeable is ERC4626Upgradeable {
             SafeERC20.safeTransfer(IERC20(asset()), recipient, fee);
         }
 
-        deposits[caller].amount = deposits[caller].amount - principalShare;
+        (, uint256 remain) = deposits[caller].amount.trySub(principalShare);
+        deposits[caller].amount = remain;
         deposits[caller].timestamp = block.timestamp;
     }
 
@@ -334,7 +330,7 @@ abstract contract ERC4626FeesUpgradeable is ERC4626Upgradeable {
     }
 
     function setMaxDeposit(uint256 newValue) public virtual {
-        maxDeposit = newValue;
+        depositLimit = newValue;
         emit MaxDeposit(newValue);
     }
 
@@ -347,15 +343,108 @@ abstract contract ERC4626FeesUpgradeable is ERC4626Upgradeable {
         investRatio = newValue;
         emit InvestRatio(newValue);
     }
+
+    function depositWithKaia(
+        uint256 assets,
+        address receiver
+    ) public payable returns (uint256) {
+        uint256 maxAssets = maxDeposit(receiver);
+        if (assets > maxAssets) {
+            revert ERC4626ExceededMaxDeposit(receiver, assets, maxAssets);
+        }
+
+        address caller = _msgSender();
+        require(
+            deposits[caller].amount + assets <= depositLimit,
+            "Max. amount of deposit is over."
+        );
+
+        uint256 shares = previewDeposit(assets);
+        _mint(receiver, shares);
+
+        emit Deposit(caller, receiver, assets, shares);
+
+        // Invest to GC Staking Pool
+        uint256 amount = _portionOnRaw(assets, _reserveRatio());
+        IKoKaia(koKaia).stake{value: amount}();
+
+        // Update States
+        deposits[caller].amount = deposits[caller].amount + assets;
+        deposits[caller].timestamp = block.timestamp;
+
+        return shares;
+    }
+
+    function withdrawWithKaia(
+        uint256 assets,
+        address receiver,
+        address owner
+    ) public virtual returns (uint256) {
+        uint256 maxAssets = maxWithdraw(owner);
+        if (assets > maxAssets) {
+            revert ERC4626ExceededMaxWithdraw(owner, assets, maxAssets);
+        }
+
+        address caller = _msgSender();
+        address recipient = _exitFeeRecipient();
+        uint256 shares = previewWithdraw(assets);
+        uint256 max = maxWithdraw(caller);
+
+        uint256 balKaia = address(this).balance;
+        if (assets > balKaia) {
+            uint256 lack = assets - balKaia;
+            uint256 _swap = lack + _portionOnRaw(lack, 2000); // Swap 20% more because of Slippage
+            int256[] memory assetDeltas = swap(_swap);
+            emit BatchSwap(assetDeltas[0], assetDeltas[1], assetDeltas[2]);
+
+            IWKaia(asset()).withdraw(lack);
+            require(
+                address(this).balance >= assets,
+                "Lack of WKAIA to withdraw"
+            );
+        }
+
+        uint256 fee = 0;
+        uint256 principalShare = assets;
+        // assets = principalShare + profitShare
+        if (max >= deposits[caller].amount) {
+            uint256 profitShare = (assets * (max - deposits[caller].amount)) /
+                max; // Profit included in assets
+
+            fee = _feeOnTotal(profitShare, _exitFeeBasisPoints()); // 10% of Profit
+            principalShare = assets - profitShare; // Principle included in assets
+            emit Fee(profitShare, fee);
+        }
+
+        uint256 amount = assets - fee; // Principle + 90% of Profit
+
+        if (caller != owner) {
+            _spendAllowance(owner, caller, shares);
+        }
+
+        _burn(owner, shares);
+        (bool rltReceiver, ) = payable(receiver).call{value: amount}("");
+        require(rltReceiver, "Fail to send KAIA to the receiver");
+
+        emit Withdraw(caller, receiver, owner, amount, shares);
+
+        if (fee > 0 && recipient != address(this)) {
+            (bool rltTreasury, ) = payable(recipient).call{value: fee}("");
+            require(rltTreasury, "Fail to send KAIA to the treasury");
+        }
+
+        (, uint256 remain) = deposits[caller].amount.trySub(principalShare);
+        deposits[caller].amount = remain;
+        deposits[caller].timestamp = block.timestamp;
+
+        return shares;
+    }
 }
 
-contract TokenizedVaultUpgradeable is
-    ERC4626FeesUpgradeable,
-    OwnableUpgradeable
-{
+contract KommuneVaultV2 is ERC4626FeesUpgradeable, OwnableUpgradeable {
     using Math for uint256;
     address payable public vaultOwner;
-    int constant VERSION = 1;
+    int constant VERSION = 2;
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
