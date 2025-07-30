@@ -8,16 +8,26 @@ const { KAIA_PRIVATE_KEY, KAIROS_PRIVATE_KEY } = process.env;
 /** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {
   solidity: {
-    compilers: [{ version: "0.5.17" }, { version: "0.8.25" }],
-    overrides: {
-      "contracts/WKLAY.sol": { version: "0.5.17" },
-    },
-    settings: {
-      optimizer: {
-        enabled: true,
-        runs: 200,
+    compilers: [
+      {
+        version: "0.8.25",
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 200,
+          },
+        },
       },
-    },
+      {
+        version: "0.5.17",
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 200,
+          },
+        },
+      },
+    ],
   },
   paths: {
     sources: "./src",
