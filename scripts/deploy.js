@@ -27,9 +27,7 @@ const treasury = contracts.treasury[chainId]; // Treasury 주소
 
 async function main() {
   // 1. deploy contract
-  const TokenizedVaultFactory = await ethers.getContractFactory(
-    "TokenizedVaultUpgradeable",
-  );
+  const TokenizedVaultFactory = await ethers.getContractFactory("KommuneVault");
 
   /**
    * TODO : 에러 해결
