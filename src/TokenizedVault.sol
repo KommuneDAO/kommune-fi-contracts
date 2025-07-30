@@ -344,9 +344,9 @@ abstract contract ERC4626Fees is ERC4626 {
     }
 
     function depositWithKaia(
-        uint256 assets,
         address receiver
     ) public payable returns (uint256) {
+        uint256 assets = msg.value;
         uint256 maxAssets = maxDeposit(receiver);
         if (assets > maxAssets) {
             revert ERC4626ExceededMaxDeposit(receiver, assets, maxAssets);
