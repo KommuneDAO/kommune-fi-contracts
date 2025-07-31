@@ -18,7 +18,7 @@ const { ChainId } = require("./config");
 
 const contracts = {
   wkaia: {
-    [ChainId.KAIA]: "0xdec2cc84f0a37ef917f63212fe8ba7494b0e4b15",
+    [ChainId.KAIA]: "0x19Aac5f612f524B754CA7e7c41cbFa2E981A4432",
     [ChainId.KAIROS]: "0x0339d5Eb6D195Ba90B13ed1BCeAa97EbD198b106",
   },
   koKaia: {
