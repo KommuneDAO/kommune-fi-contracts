@@ -7,4 +7,5 @@ interface IWKaia {
     function withdraw(uint256 amount) external;
     function getSharesByKlay(uint256 amount) external view returns (uint256);
     function getKlayByShares(uint256 amount) external view returns (uint256);
+    function balanceOf(address account) external view returns (uint256);
 }

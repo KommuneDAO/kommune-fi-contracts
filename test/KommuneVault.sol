@@ -270,7 +270,9 @@ abstract contract ERC4626FeesUpgradeable is ERC4626Upgradeable {
 
     function swap(uint256 amountIn) private returns (int256[] memory) {
         // wrap KoKAIA
-        uint256 amount = amountIn + _portionOnRaw(amountIn, 1500);
+        uint256 amount = IWKoKaia(getSwapToken(1)).getUnwrappedAmount(
+            amountIn
+        ) + 1;
         IERC20(koKaia).approve(getSwapToken(1), amount);
         IWKoKaia(getSwapToken(1)).wrap(amount);
 
@@ -343,102 +345,6 @@ abstract contract ERC4626FeesUpgradeable is ERC4626Upgradeable {
         investRatio = newValue;
         emit InvestRatio(newValue);
     }
-
-    function depositWithKaia(
-        uint256 assets,
-        address receiver
-    ) public payable returns (uint256) {
-        uint256 maxAssets = maxDeposit(receiver);
-        if (assets > maxAssets) {
-            revert ERC4626ExceededMaxDeposit(receiver, assets, maxAssets);
-        }
-
-        address caller = _msgSender();
-        require(
-            deposits[caller].amount + assets <= depositLimit,
-            "Max. amount of deposit is over."
-        );
-
-        uint256 shares = previewDeposit(assets);
-        _mint(receiver, shares);
-
-        emit Deposit(caller, receiver, assets, shares);
-
-        // Invest to GC Staking Pool
-        uint256 amount = _portionOnRaw(assets, _reserveRatio());
-        IKoKaia(koKaia).stake{value: amount}();
-
-        // Update States
-        deposits[caller].amount = deposits[caller].amount + assets;
-        deposits[caller].timestamp = block.timestamp;
-
-        return shares;
-    }
-
-    function withdrawWithKaia(
-        uint256 assets,
-        address receiver,
-        address owner
-    ) public virtual returns (uint256) {
-        uint256 maxAssets = maxWithdraw(owner);
-        if (assets > maxAssets) {
-            revert ERC4626ExceededMaxWithdraw(owner, assets, maxAssets);
-        }
-
-        address caller = _msgSender();
-        address recipient = _exitFeeRecipient();
-        uint256 shares = previewWithdraw(assets);
-        uint256 max = maxWithdraw(caller);
-
-        uint256 balKaia = address(this).balance;
-        if (assets > balKaia) {
-            uint256 lack = assets - balKaia;
-            uint256 _swap = lack + _portionOnRaw(lack, 2000); // Swap 20% more because of Slippage
-            int256[] memory assetDeltas = swap(_swap);
-            emit BatchSwap(assetDeltas[0], assetDeltas[1], assetDeltas[2]);
-
-            IWKaia(asset()).withdraw(lack);
-            require(
-                address(this).balance >= assets,
-                "Lack of WKAIA to withdraw"
-            );
-        }
-
-        uint256 fee = 0;
-        uint256 principalShare = assets;
-        // assets = principalShare + profitShare
-        if (max >= deposits[caller].amount) {
-            uint256 profitShare = (assets * (max - deposits[caller].amount)) /
-                max; // Profit included in assets
-
-            fee = _feeOnTotal(profitShare, _exitFeeBasisPoints()); // 10% of Profit
-            principalShare = assets - profitShare; // Principle included in assets
-            emit Fee(profitShare, fee);
-        }
-
-        uint256 amount = assets - fee; // Principle + 90% of Profit
-
-        if (caller != owner) {
-            _spendAllowance(owner, caller, shares);
-        }
-
-        _burn(owner, shares);
-        (bool rltReceiver, ) = payable(receiver).call{value: amount}("");
-        require(rltReceiver, "Fail to send KAIA to the receiver");
-
-        emit Withdraw(caller, receiver, owner, amount, shares);
-
-        if (fee > 0 && recipient != address(this)) {
-            (bool rltTreasury, ) = payable(recipient).call{value: fee}("");
-            require(rltTreasury, "Fail to send KAIA to the treasury");
-        }
-
-        (, uint256 remain) = deposits[caller].amount.trySub(principalShare);
-        deposits[caller].amount = remain;
-        deposits[caller].timestamp = block.timestamp;
-
-        return shares;
-    }
 }
 
 contract KommuneVault is ERC4626FeesUpgradeable, OwnableUpgradeable {
@@ -459,7 +365,7 @@ contract KommuneVault is ERC4626FeesUpgradeable, OwnableUpgradeable {
         address koKaia,
         address vault
     ) external initializer {
-        __ERC20_init("Vault USDC Token", "vUSDC");
+        __ERC20_init("Kommune KAIA Vault Token", "kvKAIA");
         __ERC4626_init(_asset);
         __ERC4626Fees_init(
             basisPointsFees,
@@ -476,78 +382,78 @@ contract KommuneVault is ERC4626FeesUpgradeable, OwnableUpgradeable {
     receive() external payable {}
 
     // TODO : TokenA → Pool1 → TokenB → Pool2 → TokenC
-    //    function performBatchSwap(
-    //        //        bytes32[] calldata poolIds, // [Pool1, Pool2]
-    //        //        address[] calldata tokens, // [TokenA, TokenB, TokenC]
-    //        uint256 amountIn
-    //    ) external returns (int256[] memory) {
-    //        //        require(tokens.length == 3, "only 2-hop swap supported");
-    //
-    //        // wrap KoKAIA
-    //        uint256 amount = amountIn +
-    //            amountIn.mulDiv(1500, 10000, Math.Rounding.Ceil);
-    //        IERC20(koKaia).approve(getSwapToken(1), amount);
-    //        IWKoKaia(getSwapToken(1)).wrap(amount);
-    //
-    //        // approve
-    //        IERC20(getSwapToken(1)).approve(address(vault), amountIn);
-    //
-    //        // Prepare assets (as IAsset)
-    //        IAsset[] memory assets = new IAsset[](3);
-    //        //        for (uint i = 0; i < 3; i++) {
-    //        //            assets[i] = IAsset(tokens[i]);
-    //        //        }
-    //        assets[0] = IAsset(getSwapToken(1));
-    //        assets[1] = IAsset(getSwapToken(2));
-    //        assets[2] = IAsset(getSwapToken(3));
-    //
-    //        // Set up BatchSwapStep[]
-    //        IBalancerVault.BatchSwapStep[]
-    //            memory steps = new IBalancerVault.BatchSwapStep[](2);
-    //        steps[0] = IBalancerVault.BatchSwapStep({
-    //            //            poolId: poolIds[0],
-    //            poolId: getSwapPool(1),
-    //            assetInIndex: 0,
-    //            assetOutIndex: 1,
-    //            amount: amountIn,
-    //            userData: ""
-    //        });
-    //
-    //        steps[1] = IBalancerVault.BatchSwapStep({
-    //            //            poolId: poolIds[1],
-    //            poolId: getSwapPool(2),
-    //            assetInIndex: 1,
-    //            assetOutIndex: 2,
-    //            amount: 0, // for multihop, set 0
-    //            userData: ""
-    //        });
-    //
-    //        // Limit: positive = max input, negative = min output
-    //        int256[] memory limits = new int256[](3);
-    //        limits[0] = int256(amountIn); // max amountIn
-    //        limits[1] = 0; // intermediate
-    //        limits[2] = -1_000_000_000; // minimum amountOut (accept anything > 0)
-    //
-    //        // Fund setup
-    //        IBalancerVault.FundManagement memory funds = IBalancerVault
-    //            .FundManagement({
-    //                sender: address(this),
-    //                fromInternalBalance: false,
-    //                recipient: msg.sender,
-    //                toInternalBalance: false
-    //            });
-    //
-    //        // Execute swap
-    //        return
-    //            IBalancerVault(vault).batchSwap(
-    //                IBalancerVault.SwapKind.GIVEN_IN,
-    //                steps,
-    //                assets,
-    //                funds,
-    //                limits,
-    //                block.timestamp + 600
-    //            );
-    //    }
+    function performBatchSwap(
+        //        bytes32[] calldata poolIds, // [Pool1, Pool2]
+        //        address[] calldata tokens, // [TokenA, TokenB, TokenC]
+        uint256 amountIn
+    ) external returns (int256[] memory) {
+        //        require(tokens.length == 3, "only 2-hop swap supported");
+
+        // wrap KoKAIA
+        uint256 amount = amountIn +
+            amountIn.mulDiv(1500, 10000, Math.Rounding.Ceil);
+        IERC20(koKaia).approve(getSwapToken(1), amount);
+        IWKoKaia(getSwapToken(1)).wrap(amount);
+
+        // approve
+        IERC20(getSwapToken(1)).approve(address(vault), amountIn);
+
+        // Prepare assets (as IAsset)
+        IAsset[] memory assets = new IAsset[](3);
+        //        for (uint i = 0; i < 3; i++) {
+        //            assets[i] = IAsset(tokens[i]);
+        //        }
+        assets[0] = IAsset(getSwapToken(1));
+        assets[1] = IAsset(getSwapToken(2));
+        assets[2] = IAsset(getSwapToken(3));
+
+        // Set up BatchSwapStep[]
+        IBalancerVault.BatchSwapStep[]
+            memory steps = new IBalancerVault.BatchSwapStep[](2);
+        steps[0] = IBalancerVault.BatchSwapStep({
+            //            poolId: poolIds[0],
+            poolId: getSwapPool(1),
+            assetInIndex: 0,
+            assetOutIndex: 1,
+            amount: amountIn,
+            userData: ""
+        });
+
+        steps[1] = IBalancerVault.BatchSwapStep({
+            //            poolId: poolIds[1],
+            poolId: getSwapPool(2),
+            assetInIndex: 1,
+            assetOutIndex: 2,
+            amount: 0, // for multihop, set 0
+            userData: ""
+        });
+
+        // Limit: positive = max input, negative = min output
+        int256[] memory limits = new int256[](3);
+        limits[0] = int256(amountIn); // max amountIn
+        limits[1] = 0; // intermediate
+        limits[2] = -1_000_000_000; // minimum amountOut (accept anything > 0)
+
+        // Fund setup
+        IBalancerVault.FundManagement memory funds = IBalancerVault
+            .FundManagement({
+                sender: address(this),
+                fromInternalBalance: false,
+                recipient: msg.sender,
+                toInternalBalance: false
+            });
+
+        // Execute swap
+        return
+            IBalancerVault(vault).batchSwap(
+                IBalancerVault.SwapKind.GIVEN_IN,
+                steps,
+                assets,
+                funds,
+                limits,
+                block.timestamp + 600
+            );
+    }
 
     function setMaxDeposit(uint256 newValue) public override onlyOwner {
         super.setMaxDeposit(newValue);

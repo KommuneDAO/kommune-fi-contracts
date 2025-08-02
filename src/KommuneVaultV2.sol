@@ -30,6 +30,7 @@ abstract contract ERC4626FeesUpgradeable is ERC4626Upgradeable {
     address public koKaia;
     address public vault;
     uint256 public depositLimit;
+    uint256 private slippage;
 
     struct DepositInfo {
         uint256 amount;
@@ -38,10 +39,12 @@ abstract contract ERC4626FeesUpgradeable is ERC4626Upgradeable {
     mapping(address => DepositInfo) public deposits;
 
     event BatchSwap(int256 indexed, int256 indexed, int256 indexed);
+    event EstimateSwap(int256 indexed, int256 indexed, int256 indexed);
     event Fee(uint256 indexed, uint256 indexed);
     event MaxDeposit(uint256 indexed);
     event BasisPointsFees(uint256 indexed);
     event InvestRatio(uint256 indexed);
+    event Slippage(uint256 indexed);
 
     function getSwapToken(int index) public view returns (address) {
         uint256 id;
@@ -92,6 +95,7 @@ abstract contract ERC4626FeesUpgradeable is ERC4626Upgradeable {
         koKaia = _koKaia;
         vault = _vault;
         depositLimit = 100 * 1e18;
+        slippage = 1000; // 10%
     }
 
     // === Overrides ===
@@ -100,16 +104,18 @@ abstract contract ERC4626FeesUpgradeable is ERC4626Upgradeable {
     function previewDeposit(
         uint256 assets
     ) public view virtual override returns (uint256) {
-        uint256 fee = _feeOnTotal(assets, _entryFeeBasisPoints());
-        return super.previewDeposit(assets - fee);
+        // uint256 fee = _feeOnTotal(assets, _entryFeeBasisPoints());
+        // return super.previewDeposit(assets - fee);
+        return super.previewDeposit(assets);
     }
 
     /// @dev Preview adding an entry fee on mint. See {IERC4626-previewMint}.
     function previewMint(
         uint256 shares
     ) public view virtual override returns (uint256) {
-        uint256 assets = super.previewMint(shares);
-        return assets + _feeOnRaw(assets, _entryFeeBasisPoints());
+        // uint256 assets = super.previewMint(shares);
+        // return assets + _feeOnRaw(assets, _entryFeeBasisPoints());
+        return super.previewMint(shares);
     }
 
     /// @dev Send entry fee to {_entryFeeRecipient}. See {IERC4626-_deposit}.
@@ -137,6 +143,11 @@ abstract contract ERC4626FeesUpgradeable is ERC4626Upgradeable {
         deposits[caller].timestamp = block.timestamp;
     }
 
+    function absSafe(int256 x) internal pure returns (uint256) {
+        require(x != type(int256).min, "abs overflow");
+        return uint256(x >= 0 ? x : -x);
+    }
+
     /// @dev Send exit fee to {_exitFeeRecipient}. See {IERC4626-_deposit}.
     function _withdraw(
         address caller,
@@ -151,20 +162,49 @@ abstract contract ERC4626FeesUpgradeable is ERC4626Upgradeable {
         uint256 balWKaia = IERC20(asset()).balanceOf(address(this));
         if (assets > balWKaia) {
             uint256 lack = assets - balWKaia;
-            uint256 _swap = lack + _portionOnRaw(lack, 2000); // Swap 20% more because of Slippage
-            int256[] memory assetDeltas = swap(_swap);
-            emit BatchSwap(assetDeltas[0], assetDeltas[1], assetDeltas[2]);
-            // require(counts[2] >= 0, "Swap returned negative output");
-            // require(
-            //   balWKaia + uint256(counts[2]) >= assets,
-            //   "Lack of WKAIA to withdraw"
-            // );
-            require(
-                IERC20(asset()).balanceOf(address(this)) >= assets,
-                "Lack of WKAIA to withdraw"
-            );
+
+            uint256 sum = IKoKaia(koKaia).balanceOf(address(this)) +
+                IWKoKaia(getSwapToken(1)).balanceOf(address(this));
+            if (lack + 1 > sum) lack = IKoKaia(koKaia).balanceOf(address(this));
+            // Swap 10% more to overcome slippage
+            uint256 delta = estimateSwap(lack + _portionOnRaw(lack, 1000));
+
+            if (delta > IWKoKaia(getSwapToken(1)).balanceOf(address(this))) {
+                uint256 swapIn = delta -
+                    IWKoKaia(getSwapToken(1)).balanceOf(address(this));
+
+                if (swapIn > IKoKaia(koKaia).balanceOf(address(this)))
+                    swapIn = IKoKaia(koKaia).balanceOf(address(this));
+
+                // wrap KoKAIA
+                uint256 needed = IWKoKaia(getSwapToken(1)).getUnwrappedAmount(
+                    swapIn
+                ) + 1;
+                if (needed > IKoKaia(koKaia).balanceOf(address(this)))
+                    needed = IKoKaia(koKaia).balanceOf(address(this));
+
+                int256[] memory assetDeltas = swap(swapIn, lack + 1, needed);
+                emit BatchSwap(assetDeltas[0], assetDeltas[1], assetDeltas[2]);
+
+                require(
+                    IERC20(asset()).balanceOf(address(this)) >= assets,
+                    "Lack of WKAIA to withdraw"
+                );
+            }
+
+            // Old Code
+            //            uint256 _swap = lack + _portionOnRaw(lack, 5000); // Swap 30% more because of Slippage
+            //
+            //            int256[] memory assetDeltas = swap(_swap, lack + 1);
+            //
+            //            emit BatchSwap(assetDeltas[0], assetDeltas[1], assetDeltas[2]);
+            //            require(
+            //                IERC20(asset()).balanceOf(address(this)) >= assets,
+            //                "Lack of WKAIA to withdraw"
+            //            );
         }
 
+        // TODO : 알고리즘 검증 필요
         uint256 fee = 0;
         uint256 principalShare = assets;
         // assets = principalShare + profitShare
@@ -177,9 +217,8 @@ abstract contract ERC4626FeesUpgradeable is ERC4626Upgradeable {
             emit Fee(profitShare, fee);
         }
 
-        uint256 amount = assets - fee; // Principle + 90% of Profit
-        super._withdraw(caller, receiver, owner, amount, shares);
-
+        super._withdraw(caller, receiver, owner, assets - fee, shares);
+        // 원금 제외, 수익에 대해서만 10%의 Protocol Fee 부과
         if (fee > 0 && recipient != address(this)) {
             SafeERC20.safeTransfer(IERC20(asset()), recipient, fee);
         }
@@ -262,17 +301,25 @@ abstract contract ERC4626FeesUpgradeable is ERC4626Upgradeable {
 
     function totalAssets() public view override returns (uint256) {
         uint256 balKaia = address(this).balance;
-        uint256 balWKaia = IERC20(asset()).balanceOf(address(this));
-        uint256 balKoKaia = IERC20(koKaia).balanceOf(address(this));
-        uint256 balWKoKaia = IERC20(getSwapToken(1)).balanceOf(address(this));
+        uint256 balWKaia = IWKaia(asset()).balanceOf(address(this)); // 1 vs 1
+        uint256 balKoKaia = IKoKaia(koKaia).balanceOf(address(this));
+        // Calculate : WKoKAIA -> KoKAIA -> number of KAIA
+        uint256 nWKoKaia = IWKoKaia(getSwapToken(1)).balanceOf(address(this));
+        uint256 unwrapped = IWKoKaia(getSwapToken(1)).getUnwrappedAmount(
+            nWKoKaia
+        );
+        uint256 balWKoKaia = IKoKaia(koKaia).getKlayByShares(unwrapped);
         return balKaia + balWKaia + balKoKaia + balWKoKaia;
     }
 
-    function swap(uint256 amountIn) private returns (int256[] memory) {
+    function swap(
+        uint256 amountIn,
+        uint256 minimum,
+        uint256 numWrap
+    ) public returns (int256[] memory) {
         // wrap KoKAIA
-        uint256 amount = amountIn + _portionOnRaw(amountIn, 1500);
-        IERC20(koKaia).approve(getSwapToken(1), amount);
-        IWKoKaia(getSwapToken(1)).wrap(amount);
+        IERC20(koKaia).approve(getSwapToken(1), numWrap);
+        IWKoKaia(getSwapToken(1)).wrap(numWrap);
 
         // approve
         IERC20(getSwapToken(1)).approve(address(vault), amountIn);
@@ -307,6 +354,7 @@ abstract contract ERC4626FeesUpgradeable is ERC4626Upgradeable {
         limits[0] = int256(amountIn); // max amountIn
         limits[1] = 0; // intermediate
         limits[2] = -1_000_000_000; // minimum amountOut (accept anything > 0)
+        // limits[2] = int256(minimum);
 
         // Fund setup
         IBalancerVault.FundManagement memory funds = IBalancerVault
@@ -329,6 +377,53 @@ abstract contract ERC4626FeesUpgradeable is ERC4626Upgradeable {
             );
     }
 
+    function estimateSwap(uint256 amountOut) public returns (uint256) {
+        // Prepare assets (as IAsset)
+        IAsset[] memory assets = new IAsset[](3);
+        assets[0] = IAsset(getSwapToken(1));
+        assets[1] = IAsset(getSwapToken(2));
+        assets[2] = IAsset(getSwapToken(3));
+
+        // Set up BatchSwapStep[]
+        IBalancerVault.BatchSwapStep[]
+            memory steps = new IBalancerVault.BatchSwapStep[](2);
+        steps[0] = IBalancerVault.BatchSwapStep({
+            poolId: getSwapPool(2),
+            assetInIndex: 1,
+            assetOutIndex: 2,
+            amount: amountOut,
+            userData: ""
+        });
+
+        steps[1] = IBalancerVault.BatchSwapStep({
+            poolId: getSwapPool(1),
+            assetInIndex: 0,
+            assetOutIndex: 1,
+            amount: 0,
+            userData: ""
+        });
+
+        // Fund setup
+        IBalancerVault.FundManagement memory funds = IBalancerVault
+            .FundManagement({
+                sender: address(this),
+                fromInternalBalance: false,
+                recipient: address(this),
+                toInternalBalance: false
+            });
+
+        // Simulate swap
+        int256[] memory deltas = IBalancerVault(vault).queryBatchSwap(
+            IBalancerVault.SwapKind.GIVEN_OUT,
+            steps,
+            assets,
+            funds
+        );
+
+        emit EstimateSwap(deltas[0], deltas[1], deltas[2]);
+        return absSafe(deltas[0]);
+    }
+
     function setMaxDeposit(uint256 newValue) public virtual {
         depositLimit = newValue;
         emit MaxDeposit(newValue);
@@ -344,100 +439,9 @@ abstract contract ERC4626FeesUpgradeable is ERC4626Upgradeable {
         emit InvestRatio(newValue);
     }
 
-    function depositWithKaia(
-        address receiver
-    ) public payable returns (uint256) {
-        uint256 assets = msg.value;
-        uint256 maxAssets = maxDeposit(receiver);
-        if (assets > maxAssets) {
-            revert ERC4626ExceededMaxDeposit(receiver, assets, maxAssets);
-        }
-
-        address caller = _msgSender();
-        require(
-            deposits[caller].amount + assets <= depositLimit,
-            "Max. amount of deposit is over."
-        );
-
-        uint256 shares = previewDeposit(assets);
-        _mint(receiver, shares);
-
-        emit Deposit(caller, receiver, assets, shares);
-
-        // Invest to GC Staking Pool
-        uint256 amount = _portionOnRaw(assets, _reserveRatio());
-        IKoKaia(koKaia).stake{value: amount}();
-
-        // Update States
-        deposits[caller].amount = deposits[caller].amount + assets;
-        deposits[caller].timestamp = block.timestamp;
-
-        return shares;
-    }
-
-    function withdrawWithKaia(
-        uint256 assets,
-        address receiver,
-        address owner
-    ) public virtual returns (uint256) {
-        uint256 maxAssets = maxWithdraw(owner);
-        if (assets > maxAssets) {
-            revert ERC4626ExceededMaxWithdraw(owner, assets, maxAssets);
-        }
-
-        address caller = _msgSender();
-        address recipient = _exitFeeRecipient();
-        uint256 shares = previewWithdraw(assets);
-        uint256 max = maxWithdraw(caller);
-
-        uint256 balKaia = address(this).balance;
-        if (assets > balKaia) {
-            uint256 lack = assets - balKaia;
-            uint256 _swap = lack + _portionOnRaw(lack, 2000); // Swap 20% more because of Slippage
-            int256[] memory assetDeltas = swap(_swap);
-            emit BatchSwap(assetDeltas[0], assetDeltas[1], assetDeltas[2]);
-
-            IWKaia(asset()).withdraw(lack);
-            require(
-                address(this).balance >= assets,
-                "Lack of WKAIA to withdraw"
-            );
-        }
-
-        uint256 fee = 0;
-        uint256 principalShare = assets;
-        // assets = principalShare + profitShare
-        if (max >= deposits[caller].amount) {
-            uint256 profitShare = (assets * (max - deposits[caller].amount)) /
-                max; // Profit included in assets
-
-            fee = _feeOnTotal(profitShare, _exitFeeBasisPoints()); // 10% of Profit
-            principalShare = assets - profitShare; // Principle included in assets
-            emit Fee(profitShare, fee);
-        }
-
-        uint256 amount = assets - fee; // Principle + 90% of Profit
-
-        if (caller != owner) {
-            _spendAllowance(owner, caller, shares);
-        }
-
-        _burn(owner, shares);
-        (bool rltReceiver, ) = payable(receiver).call{value: amount}("");
-        require(rltReceiver, "Fail to send KAIA to the receiver");
-
-        emit Withdraw(caller, receiver, owner, amount, shares);
-
-        if (fee > 0 && recipient != address(this)) {
-            (bool rltTreasury, ) = payable(recipient).call{value: fee}("");
-            require(rltTreasury, "Fail to send KAIA to the treasury");
-        }
-
-        (, uint256 remain) = deposits[caller].amount.trySub(principalShare);
-        deposits[caller].amount = remain;
-        deposits[caller].timestamp = block.timestamp;
-
-        return shares;
+    function setSlippage(uint256 newValue) public virtual {
+        slippage = newValue;
+        emit Slippage(newValue);
     }
 }
 
@@ -459,7 +463,7 @@ contract KommuneVaultV2 is ERC4626FeesUpgradeable, OwnableUpgradeable {
         address koKaia,
         address vault
     ) external initializer {
-        __ERC20_init("Vault USDC Token", "vUSDC");
+        __ERC20_init("Kommune KAIA Vault Token", "kvKAIA");
         __ERC4626_init(_asset);
         __ERC4626Fees_init(
             basisPointsFees,

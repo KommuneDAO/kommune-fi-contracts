@@ -7,5 +7,7 @@ interface IKoKaia {
     function unstake(uint256 amount) external;
     function claim(address user) external;
     function increaseTotalStaking(uint256 amount) external;
+    function getKlayByShares(uint256 amount) external view returns (uint256);
+    function getSharesByKlay(uint256 amount) external view returns (uint256);
     function balanceOf(address account) external view returns (uint256);
 }

@@ -10,8 +10,9 @@ module.exports = {
   solidity: {
     compilers: [
       {
-        version: "0.8.25",
+        version: "0.8.26",
         settings: {
+          evmVersion: "cancun",
           optimizer: {
             enabled: true,
             runs: 200,
@@ -37,11 +38,13 @@ module.exports = {
   },
   networks: {
     kaia: {
-      url: `hhttps://public-en.node.kaia.io`,
+      url: "https://klaytn-en.kommunedao.xyz:8651",
+      chainId: 8217,
       accounts: [KAIA_PRIVATE_KEY],
     },
     kairos: {
       url: "https://public-en-kairos.node.kaia.io",
+      chainId: 1001,
       accounts: [KAIROS_PRIVATE_KEY],
     },
   },

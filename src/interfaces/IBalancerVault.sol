@@ -51,4 +51,11 @@ interface IBalancerVault {
         int256[] calldata limits,
         uint256 deadline
     ) external returns (int256[] memory);
+
+    function queryBatchSwap(
+        SwapKind kind,
+        BatchSwapStep[] calldata swaps,
+        IAsset[] calldata assets,
+        FundManagement calldata funds
+    ) external returns (int256[] memory);
 }
