@@ -39,6 +39,7 @@ abstract contract ERC4626FeesUpgradeable is ERC4626Upgradeable {
     mapping(address => DepositInfo) public deposits;
 
     event BatchSwap(int256 indexed, int256 indexed, int256 indexed);
+    event SwapInfo(uint256 indexed, uint256 indexed);
     event EstimateSwap(int256 indexed, int256 indexed, int256 indexed);
     event Fee(uint256 indexed, uint256 indexed);
     event MaxDeposit(uint256 indexed);
@@ -167,7 +168,7 @@ abstract contract ERC4626FeesUpgradeable is ERC4626Upgradeable {
                 IWKoKaia(getSwapToken(1)).balanceOf(address(this));
             if (lack + 1 > sum) lack = IKoKaia(koKaia).balanceOf(address(this));
             // Swap 10% more to overcome slippage
-            uint256 delta = estimateSwap(lack + _portionOnRaw(lack, 1000));
+            uint256 delta = estimateSwap(lack + _portionOnRaw(lack, slippage));
 
             if (delta > IWKoKaia(getSwapToken(1)).balanceOf(address(this))) {
                 uint256 swapIn = delta -
@@ -185,6 +186,7 @@ abstract contract ERC4626FeesUpgradeable is ERC4626Upgradeable {
 
                 int256[] memory assetDeltas = swap(swapIn, lack + 1, needed);
                 emit BatchSwap(assetDeltas[0], assetDeltas[1], assetDeltas[2]);
+                emit SwapInfo(lack + 1, absSafe(assetDeltas[2]));
 
                 require(
                     IERC20(asset()).balanceOf(address(this)) >= assets,
