@@ -4,18 +4,25 @@ const fs = require("fs");
 const networkName = hre.network.name;
 console.log("!! start upgrade to : ", networkName);
 
-async function upgradeTokenizedVault(TokenizedVault) {
-  const V2Factory = await ethers.getContractFactory("KommuneVaultV2");
-  const v2Factory = await upgrades.upgradeProxy(TokenizedVault, V2Factory);
-  console.log("TokenizedVault upgraded : ", await v2Factory.getAddress());
+async function upgradeKVault(vaultAddress) {
+  const KVaultV2Factory = await ethers.getContractFactory("KVaultV2");
+  const upgraded = await upgrades.upgradeProxy(vaultAddress, KVaultV2Factory);
+  console.log("KVaultV2 upgraded : ", await upgraded.getAddress());
+}
+
+async function upgradeSwapContract(swapAddress) {
+  const SwapFactory = await ethers.getContractFactory("SwapContract");
+  const upgraded = await upgrades.upgradeProxy(swapAddress, SwapFactory);
+  console.log("SwapContract upgraded : ", await upgraded.getAddress());
 }
 
 async function main() {
   const deployments = JSON.parse(
-    fs.readFileSync(`deploy-${networkName}.json`, "utf8"),
+    fs.readFileSync(`deployments-${networkName}.json`, "utf8"),
   );
 
-  await upgradeTokenizedVault(deployments.TokenizedVault);
+  await upgradeKVault(deployments.KVaultV2);
+  await upgradeSwapContract(deployments.SwapContract);
 }
 
 main();

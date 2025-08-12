@@ -168,7 +168,53 @@ yarn deploy-all:dev
 | KVaultV2 Deploy | ~3.0M gas |
 | SwapContract Upgrade | ~0.5M gas |
 | KVaultV2 Upgrade | ~1.0M gas |
+| APY Update (single) | ~50K gas |
+| APY Update (batch) | ~150K gas |
+
+## 📈 APY Management
+
+### APY 형식 및 설정
+
+```javascript
+// APY 형식: 소수점 2자리 퍼센트 (5.25% = 525)
+const vault = await ethers.getContractAt("KVaultV2", vaultAddress);
+
+// 개별 APY 설정
+await vault.setAPY(0, 575); // KoKAIA에 5.75% 설정
+
+// 일괄 APY 설정
+await vault.setMultipleAPY([500, 475, 525, 450]); // 모든 프로토콜 APY 설정
+
+// APY 조회
+const apys = await vault.getAllAPY();
+console.log(`Current APYs: ${apys.map(apy => (Number(apy)/100).toFixed(2))}%`);
+```
+
+### 지원되는 프로토콜
+
+| Index | Protocol | Description |
+|-------|----------|-------------|
+| 0 | KoKAIA | KommuneDAO Liquid Staking |
+| 1 | GCKAIA | Swapscanner Governance Council |
+| 2 | stKLAY | Kracker Labs Klaytn Staking |
+| 3 | stKAIA | Lair Finance Kaia Staking |
+
+### APY 테스트 및 관리
+
+```bash
+# APY 기능 테스트
+yarn test-apy:dev
+
+# APY 값 재설정 (필요시)
+npx hardhat run scripts/resetAPY.js --network kairos
+```
+
+### 투자 로직
+
+1. **자산 배분**: 높은 APY 프로토콜에 더 많은 투자
+2. **출금 우선순위**: 낮은 APY 프로토콜부터 출금
+3. **자동 리밸런싱**: APY 변경 시 새로운 투자 분배 적용
 
 ---
 
-*이 문서는 KVaultV2 v1.0.0 기준으로 작성되었습니다.*
+*이 문서는 KVaultV2 v1.1.0 (APY Management) 기준으로 작성되었습니다.*

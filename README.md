@@ -4,8 +4,15 @@ ERC-4626 Tokenized Vault with APY-based multi-asset staking and smart swap funct
 
 ## 🏗️ Architecture
 
-- **KVaultV2** (22.2 KiB): Main ERC4626 vault with multi-asset withdrawal and APY-based staking
-- **SwapContract** (4.2 KiB): Upgradeable Balancer DEX integration for token swaps
+- **KVaultV2** (22.8 KiB): Main ERC4626 vault with APY-based multi-asset staking
+  - 📈 Dynamic APY management for 4 LST protocols
+  - 🔄 Intelligent asset allocation based on yield optimization
+  - 🔁 Multi-asset withdrawal with priority-based selection
+  - 🛜 Upgradeable architecture for continuous improvements
+- **SwapContract** (4.2 KiB): Upgradeable Balancer DEX integration
+  - 🔄 Cross-protocol token swapping
+  - 📊 Slippage-protected transactions
+  - 🔍 Swap estimation and routing
 
 ## 🚀 Quick Start
 
@@ -45,28 +52,122 @@ yarn upgrade-swap:dev    # Upgrade SwapContract
 yarn upgrade-vault:dev   # Upgrade KVaultV2
 ```
 
+### APY Management
+```bash
+yarn test-apy:dev        # Test APY functions (Testnet)
+yarn test-apy:prod       # Test APY functions (Mainnet)
+```
+
 ### Legacy (Deprecated)
 ```bash
 yarn deploy:dev          # Old KommuneVault
 yarn upgrade:dev         # Old upgrade script
 ```
 
+## 📈 APY Management System
+
+KVaultV2 implements a sophisticated APY-based asset allocation system across 4 LST protocols:
+
+### 🎨 Supported Protocols
+- **Index 0**: KoKAIA (KommuneDAO) - Liquid Staking Token
+- **Index 1**: GCKAIA (Swapscanner) - Governance Council Staking
+- **Index 2**: stKLAY (Kracker Labs) - Klaytn Staking
+- **Index 3**: stKAIA (Lair Finance) - Kaia Staking
+
+### ⚙️ APY Functions
+
+```solidity
+// Set individual APY (only operators)
+setAPY(uint256 index, uint256 apy)        // 5.25% = 525
+
+// Set multiple APYs at once
+setMultipleAPY(uint256[4] apyValues)       // [500, 475, 525, 450]
+
+// Query APY values
+getAPY(uint256 index)                     // Returns: 525 (for 5.25%)
+getAllAPY()                               // Returns: [500, 475, 525, 450]
+getAPYInBasisPoints(uint256 index)        // Returns: 5250 (internal format)
+```
+
+### 📀 APY Format
+- **Input**: Percentage with 2 decimal places (5.25% = 525)
+- **Storage**: Basis points (525 × 10 = 5250 for internal calculations)
+- **Range**: 0.00% to 100.00% (0 to 10000)
+
+### 🔄 Investment Logic
+1. **Asset Allocation**: Higher APY protocols receive more investment
+2. **Withdrawal Priority**: Lower APY protocols are withdrawn first
+3. **Automatic Rebalancing**: Based on real-time APY values
+
+### 🎆 Events
+```solidity
+event APYUpdated(uint256 indexed index, uint256 oldAPY, uint256 newAPY);
+```
+
+### 📊 Usage Examples
+
+```javascript
+// Connect to deployed contract
+const vault = await ethers.getContractAt("KVaultV2", vaultAddress);
+
+// Set APY for KoKAIA to 5.75%
+await vault.setAPY(0, 575);
+
+// Set all APYs at once
+await vault.setMultipleAPY([625, 550, 475, 500]); // 6.25%, 5.50%, 4.75%, 5.00%
+
+// Check current APY values
+const apys = await vault.getAllAPY();
+console.log(`KoKAIA APY: ${apys[0]/100}%`); // 6.25%
+
+// Check individual APY
+const kokaiaAPY = await vault.getAPY(0);
+console.log(`KoKAIA: ${kokaiaAPY/100}%`); // 6.25%
+```
+
+### 🔑 Access Control
+- **APY Updates**: Only `operators` can modify APY values
+- **Owner Functions**: Add/remove operators
+- **Public Queries**: Anyone can read APY values
+
 ## 📋 For detailed deployment instructions, see [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md)
 
-Kommune Swap for Testnet
-```
-address constant TOKEN_A = 0x9a93e2fcDEBE43d0f8205D1cd255D709B7598317; // wKoKAIA
-address constant TOKEN_B = 0x985acD34f36D91768aD4b0cB295Aa919A7ABDb27; // 5LST
-address constant TOKEN_C = 0x0339d5Eb6D195Ba90B13ed1BCeAa97EbD198b106; // WKAIA
-bytes32 constant POOL1 = 0x8193fe745f2784b1f55e51f71145d2b8b0739b8100020000000000000000000e; // LST Pool
-bytes32 constant POOL2 = 0x0c5da2fa11fc2d7eee16c06740072e3c5e1bb4a7000200000000000000000001; // WKAIA-5LST Pool
+## 🌐 Network Configuration
+
+### Kairos Testnet
+```bash
+# Contract addresses stored in deployments-kairos.json
+# Generated after running: yarn deploy-all:dev
 ```
 
-Kommune Swap for Mainnet
+### Kaia Mainnet
+```bash
+# Contract addresses stored in deployments-kaia.json  
+# Generated after running: yarn deploy-all:prod
 ```
-address constant TOKEN_A = 0xdEC2Cc84f0a37Ef917f63212FE8ba7494b0E4B15; // wKoKAIA
-address constant TOKEN_B = 0xA006e8dF6A3CBc66D4D707C97A9FDAf026096487; // 5LST
-address constant TOKEN_C = 0x19Aac5f612f524B754CA7e7c41cbFa2E981A4432; // WKAIA
-bytes32 constant POOL1 = 0xa006e8df6a3cbc66d4d707c97a9fdaf026096487000000000000000000000000; // LST Pool
-bytes32 constant POOL2 = 0x17f3eda2bf1aa1e7983906e675ac9a2ab6bc57de000000000000000000000001; // WKAIA-5LST Pool
+
+### Protocol Addresses (Testnet)
+```solidity
+// LST Protocols
+KoKAIA:  0xb15782EFbC2034E366670599F3997f94c7333FF9
+GCKAIA:  0x4EC04F4D46D7e34EBf0C3932B65068168FDcE7f6
+stKLAY:  0x524dCFf07BFF606225A4FA76AFA55D705B052004
+stKAIA:  0x45886b01276c45Fe337d3758b94DD8D7F3951d97
+
+// DEX Integration
+Balancer Vault: 0x1c9074AA147648567015287B0d4185Cb4E04F86d
+WKAIA: 0x0339d5Eb6D195Ba90B13ed1BCeAa97EbD198b106
+```
+
+## 🧪 Testing
+
+```bash
+# Run APY function tests
+yarn test-apy:dev
+
+# Check contract sizes
+yarn sizetest
+
+# Run full test suite
+yarn test
 ```

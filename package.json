@@ -22,6 +22,10 @@
     "upgrade-swap:prod": "hardhat run ./scripts/upgradeSwapContract.js --network kaia",
     "upgrade-vault:dev": "hardhat run ./scripts/upgradeKVaultV2.js --network kairos",
     "upgrade-vault:prod": "hardhat run ./scripts/upgradeKVaultV2.js --network kaia",
+    "test-apy:dev": "hardhat run ./scripts/testAPY.js --network kairos",
+    "test-apy:prod": "hardhat run ./scripts/testAPY.js --network kaia",
+    "reset-apy:dev": "hardhat run ./scripts/resetAPY.js --network kairos",
+    "reset-apy:prod": "hardhat run ./scripts/resetAPY.js --network kaia",
     "sizetest": "hardhat size-contracts --no-compile",
     "test": "hardhat test"
   },

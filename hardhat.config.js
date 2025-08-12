@@ -1,6 +1,7 @@
 require("@nomicfoundation/hardhat-toolbox");
 require("@openzeppelin/hardhat-upgrades");
 require("@nomicfoundation/hardhat-verify");
+require("hardhat-contract-sizer");
 require("dotenv").config();
 
 const { KAIA_PRIVATE_KEY, KAIROS_PRIVATE_KEY } = process.env;
@@ -43,7 +44,8 @@ module.exports = {
       accounts: [KAIA_PRIVATE_KEY],
     },
     kairos: {
-      url: "https://public-en-kairos.node.kaia.io",
+      url: "https://responsive-green-emerald.kaia-kairos.quiknode.pro",
+      // url: "https://public-en-kairos.node.kaia.io",
       chainId: 1001,
       accounts: [KAIROS_PRIVATE_KEY],
     },

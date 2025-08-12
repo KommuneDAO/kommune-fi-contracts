@@ -79,16 +79,15 @@ abstract contract ERC4626FeesUpgradeable is ERC4626Upgradeable {
     }
 
     function _initTestnet() private {
-        address[4] memory handlers = [0xb15782EFbC2034E366670599F3997f94c7333FF9, 0xe4c732f651B39169648A22F159b815d8499F996c, 0x28B13a88E72a2c8d6E93C28dD39125705d78E75F, 0xeF04889907584fDCf0F430eA223bB7e3802a8ab9];
-        address[4] memory assets = [0xb15782EFbC2034E366670599F3997f94c7333FF9, 0x4EC04F4D46D7e34EBf0C3932B65068168FDcE7f6, 0x524dCFf07BFF606225A4FA76AFA55D705B052004, 0x2AA2b61a2443CE46992FaF580A046Be560402CB6];
-        address[4] memory tokenAs = [0x9a93e2fcDEBE43d0f8205D1cd255D709B7598317, 0x324353670B23b16DFacBDE169Cd8ebF8C8bf6601, 0x474B49DF463E528223F244670e332fE82742e1aA, 0x2AA2b61a2443CE46992FaF580A046Be560402CB6];
+        address[4] memory handlers = [0xb15782EFbC2034E366670599F3997f94c7333FF9, 0xe4c732f651B39169648A22F159b815d8499F996c, 0x28B13a88E72a2c8d6E93C28dD39125705d78E75F, 0x4C0d434C7DD74491A52375163a7b724ED387d0b6];
+        address[4] memory assets = [0xb15782EFbC2034E366670599F3997f94c7333FF9, 0x4EC04F4D46D7e34EBf0C3932B65068168FDcE7f6, 0x524dCFf07BFF606225A4FA76AFA55D705B052004, 0x45886b01276c45Fe337d3758b94DD8D7F3951d97];
+        address[4] memory tokenAs = [0x9a93e2fcDEBE43d0f8205D1cd255D709B7598317, 0x324353670B23b16DFacBDE169Cd8ebF8C8bf6601, 0x474B49DF463E528223F244670e332fE82742e1aA, 0x45886b01276c45Fe337d3758b94DD8D7F3951d97];
         bytes32 pool1_0 = 0x8193fe745f2784b1f55e51f71145d2b8b0739b8100020000000000000000000e;
-        bytes32 pool1_other = 0x5ad4fa6027e5c7de20533eb27713b04698f49820000100000000000000000013;
+        bytes32 pool1_other = 0x7a665fb838477cbf719f5f34af4b7c1faebb7112000100000000000000000014;
         bytes32 pool2 = 0x0c5da2fa11fc2d7eee16c06740072e3c5e1bb4a7000200000000000000000001;
-        for (uint i = 0; i < 3; i++) {
+        for (uint i = 0; i < 4; i++) {
             tokensInfo[i] = TokenInfo(handlers[i], assets[i], tokenAs[i], 0x985acD34f36D91768aD4b0cB295Aa919A7ABDb27, 0x0339d5Eb6D195Ba90B13ed1BCeAa97EbD198b106, i == 0 ? pool1_0 : pool1_other, pool2);
         }
-        tokensInfo[3] = TokenInfo(handlers[3], assets[3], tokenAs[3], 0xDf57a1A59c9ee033D04637E2481B2608eFFf460f, 0x0339d5Eb6D195Ba90B13ed1BCeAa97EbD198b106, 0xdf57a1a59c9ee033d04637e2481b2608efff460f000000000000000000000000, 0xc77f7541b38b44bcfcec2b4b51452b6d048ec56b000000000000000000000003);
     }
 
     function __ERC4626Fees_init(
@@ -158,21 +157,13 @@ abstract contract ERC4626FeesUpgradeable is ERC4626Upgradeable {
         uint256 balWKaia = IERC20(asset()).balanceOf(address(this));
         if (assets > balWKaia) {
             uint256 lack = assets - balWKaia;
-
-            // 먼저 단일 자산으로 충족 가능한지 확인
             (uint256 idx, uint256 avail) = selectAsset(lack);
-
             if (avail >= lack) {
-                // 단일 자산으로 충족 가능
                 _performSmartSwap(idx, lack);
             } else {
-                // 다중 자산 조합 필요
                 execWithdraw(lack);
             }
-
-            require(
-                IERC20(asset()).balanceOf(address(this)) >= assets, ""
-            );
+            require(IERC20(asset()).balanceOf(address(this)) >= assets, "");
         }
 
         uint256 fee = 0;
@@ -242,7 +233,7 @@ assets.mulDiv(ratio, ratio + _BASIS_POINT_SCALE, Math.Rounding.Ceil);
             uint256 uw1 = IWrapped(tokensInfo[0].tokenA).getUnwrappedAmount(
                 num1
             );
-            sum = sum + IKoKaia(tokensInfo[0].asset).getKlayByShares(uw1);
+            sum = sum + uw1;
 
             sum = sum + IGcKaia(tokensInfo[1].asset).balanceOf(address(this));
             uint256 num2 = IWrapped(tokensInfo[1].tokenA).balanceOf(address(this));
@@ -253,7 +244,7 @@ assets.mulDiv(ratio, ratio + _BASIS_POINT_SCALE, Math.Rounding.Ceil);
             uint256 uw3 = IWrapped(tokensInfo[2].tokenA).getUnwrappedAmount(
                 num3
             );
-            sum = sum + IStKlay(tokensInfo[2].asset).getKlayByShares(uw3);
+            sum = sum + uw3;
 
             uint256 num4 = IStKaia(tokensInfo[3].asset).balanceOf(address(this));
             sum =
@@ -303,10 +294,10 @@ assets.mulDiv(ratio, ratio + _BASIS_POINT_SCALE, Math.Rounding.Ceil);
     {
         tw = 0;
         for (uint256 i = 0; i < 4; i++) {
-            weights[i] = lstAPY[i];
-            tw += lstAPY[i];
+            // Use actual APY values for weight calculation (divide by 10 to get original percentage)
+            weights[i] = lstAPY[i] / 10;
+            tw += weights[i];
         }
-
         require(tw > 0, "");
     }
 
@@ -360,16 +351,43 @@ assets.mulDiv(ratio, ratio + _BASIS_POINT_SCALE, Math.Rounding.Ceil);
 
     function getLSTBalances() internal view returns (AssetBalance[4] memory balances) {
         for (uint256 i = 0; i < 4; i++) {
-            balances[i].balance = IERC20(tokensInfo[i].asset).balanceOf(address(this));
+            // Get asset balance safely
+            try IERC20(tokensInfo[i].asset).balanceOf(address(this)) returns (uint256 balance) {
+                balances[i].balance = balance;
+            } catch {
+                balances[i].balance = 0;
+            }
+            
             if (i < 3) {
-                balances[i].wrapBal = IWrapped(tokensInfo[i].tokenA).balanceOf(address(this));
-                uint256 uw = (i == 1) ? balances[i].wrapBal : IWrapped(tokensInfo[i].tokenA).getUnwrappedAmount(balances[i].wrapBal);
-                uint256 value = (i == 0) ? IKoKaia(tokensInfo[i].asset).getKlayByShares(uw) :
-                               (i == 1) ? uw : IStKlay(tokensInfo[i].asset).getKlayByShares(uw);
-                balances[i].totalValue = balances[i].balance + value;
+                // Get wrapped balance safely
+                try IWrapped(tokensInfo[i].tokenA).balanceOf(address(this)) returns (uint256 wrapBalance) {
+                    balances[i].wrapBal = wrapBalance;
+                } catch {
+                    balances[i].wrapBal = 0;
+                }
+                
+                uint256 uw = 0;
+                if (balances[i].wrapBal > 0) {
+                    if (i == 1) {
+                        uw = balances[i].wrapBal;
+                    } else {
+                        try IWrapped(tokensInfo[i].tokenA).getUnwrappedAmount(balances[i].wrapBal) returns (uint256 unwrapped) {
+                            uw = unwrapped;
+                        } catch {
+                            uw = balances[i].wrapBal; // Fallback to 1:1 ratio
+                        }
+                    }
+                }
+                
+                balances[i].totalValue = balances[i].balance + uw;
+                
             } else {
                 balances[i].wrapBal = 0;
-                balances[i].totalValue = IStKaia(tokensInfo[i].asset).getRatioNativeTokenByStakingToken(balances[i].balance);
+                try IStKaia(tokensInfo[i].asset).getRatioNativeTokenByStakingToken(balances[i].balance) returns (uint256 ratio) {
+                    balances[i].totalValue = ratio;
+                } catch {
+                    balances[i].totalValue = balances[i].balance; // Fallback to 1:1 ratio
+                }
             }
         }
     }
@@ -431,7 +449,7 @@ assets.mulDiv(ratio, ratio + _BASIS_POINT_SCALE, Math.Rounding.Ceil);
                 plan.indices[cnt] = idx;
                 plan.amounts[cnt] = use;
                 plan.totAvail += use;
-                rem -= use;
+                rem = rem > use ? rem - use : 0;
                 cnt++;
             }
         }
@@ -449,7 +467,13 @@ assets.mulDiv(ratio, ratio + _BASIS_POINT_SCALE, Math.Rounding.Ceil);
     }
 
     function getSorted() internal view returns (uint256[4] memory sorted) {
-        uint256[4] memory apys = [lstAPY[0], lstAPY[1], lstAPY[2], lstAPY[3]];
+        // Use actual APY values for sorting (safely divide by 10 to get original percentage)
+        uint256[4] memory apys = [
+            lstAPY[0] > 0 ? lstAPY[0] / 10 : 0, 
+            lstAPY[1] > 0 ? lstAPY[1] / 10 : 0, 
+            lstAPY[2] > 0 ? lstAPY[2] / 10 : 0, 
+            lstAPY[3] > 0 ? lstAPY[3] / 10 : 0
+        ];
         sorted = [uint256(0), 1, 2, 3];
 
         for (uint256 i = 0; i < 3; i++) {
@@ -477,19 +501,29 @@ assets.mulDiv(ratio, ratio + _BASIS_POINT_SCALE, Math.Rounding.Ceil);
             }
         }
 
-        uint256 swp = IERC20(asset()).balanceOf(address(this)) - initBal;
+        uint256 finalBal = IERC20(asset()).balanceOf(address(this));
+        uint256 swp = finalBal > initBal ? finalBal - initBal : 0;
         emit MultiAssetWithdraw(amt, used, swp);
     }
 
+
     function _performSmartSwap(uint256 index, uint256 amt) internal {
+        if (amt == 0) return;
+        
         AssetBalance[4] memory balances = getLSTBalances();
-        uint256 actual = amt + _portionOnRaw(amt, slippage);
+        if (balances[index].totalValue == 0) return;
 
         if (index == 3) {
-            uint256 needed = IStKaia(tokensInfo[index].asset).getRatioStakingTokenByNativeToken(actual);
-            if (needed > balances[index].balance) needed = balances[index].balance;
+            // stKAIA unstaking logic
+            uint256 targetAmount = (amt * 110) / 100; // 10% buffer for stKAIA
+            uint256 needed;
+            unchecked {
+                needed = IStKaia(tokensInfo[index].asset).getRatioStakingTokenByNativeToken(targetAmount);
+                if (needed > balances[index].balance) needed = balances[index].balance;
+            }
 
             if (needed > 0) {
+                IERC20(tokensInfo[index].asset).approve(tokensInfo[index].handler, 0);
                 IERC20(tokensInfo[index].asset).approve(tokensInfo[index].handler, needed);
                 IStKaia(tokensInfo[index].handler).unstake(0x1856E6fDbF8FF701Fa1aB295E1bf229ABaB56899, address(this), needed);
 
@@ -497,33 +531,72 @@ assets.mulDiv(ratio, ratio + _BASIS_POINT_SCALE, Math.Rounding.Ceil);
                 if (kaia > 0) IWKaia(asset()).deposit{value: kaia}();
             }
         } else {
-            uint256 reqWrap = actual > balances[index].wrapBal ? actual - balances[index].wrapBal : 0;
-            uint256 wrap = 0;
-
-            if (reqWrap > 0) {
-                if (index == 0) {
-                    wrap = IWrapped(tokensInfo[index].tokenA).getUnwrappedAmount(reqWrap);
-                } else if (index == 1) {
-                    wrap = IWrapped(tokensInfo[index].tokenA).getGCKLAYByWGCKLAY(reqWrap);
-                } else if (index == 2) {
-                    wrap = IWrapped(tokensInfo[index].tokenA).getUnwrappedAmount(reqWrap);
+            // Step 1: estimateSwap으로 필요한 wrapped token 양 계산
+            uint256 requiredWrapped;
+            try this.estimateSwap(index, amt) returns (uint256 estimated) {
+                requiredWrapped = (estimated * 105) / 100; // 5% buffer for safety
+            } catch {
+                requiredWrapped = (amt * 120) / 100; // More conservative fallback
+            }
+            
+            // Step 2: 현재 wrapped balance 확인
+            uint256 currentWrapped = balances[index].wrapBal;
+            uint256 assetToWrap = 0;
+            
+            if (requiredWrapped > currentWrapped) {
+                uint256 needToWrap = requiredWrapped - currentWrapped;
+                
+                // Step 3: getUnwrappedAmount로 필요한 asset 양 계산
+                if (index == 0 || index == 2) {
+                    try IWrapped(tokensInfo[index].tokenA).getUnwrappedAmount(needToWrap) returns (uint256 unwrapped) {
+                        assetToWrap = unwrapped;
+                    } catch { assetToWrap = (needToWrap * 101) / 100; }
+                } else {
+                    try IWrapped(tokensInfo[index].tokenA).getGCKLAYByWGCKLAY(needToWrap) returns (uint256 gck) {
+                        assetToWrap = gck;
+                    } catch { assetToWrap = (needToWrap * 101) / 100; }
                 }
-
-                if (wrap > balances[index].balance) wrap = balances[index].balance;
-
-                if (wrap > 0) {
-                    IERC20(tokensInfo[index].asset).approve(tokensInfo[index].tokenA, wrap);
-                    IWrapped(tokensInfo[index].tokenA).wrap(wrap);
+                
+                // Step 4: Asset 잔액으로 제한하고 wrap 실행
+                if (assetToWrap > balances[index].balance) {
+                    assetToWrap = balances[index].balance;
+                }
+                
+                if (assetToWrap > 0) {
+                    IERC20(tokensInfo[index].asset).approve(tokensInfo[index].tokenA, 0);
+                    IERC20(tokensInfo[index].asset).approve(tokensInfo[index].tokenA, assetToWrap);
+                    
+                    uint256 balanceBefore = IWrapped(tokensInfo[index].tokenA).balanceOf(address(this));
+                    IWrapped(tokensInfo[index].tokenA).wrap(assetToWrap);
+                    uint256 balanceAfter = IWrapped(tokensInfo[index].tokenA).balanceOf(address(this));
+                    require(balanceAfter > balanceBefore, "Wrap failed");
                 }
             }
-
-            uint256 swapAmt = IWrapped(tokensInfo[index].tokenA).balanceOf(address(this));
-            if (swapAmt > actual) swapAmt = actual;
-
-            if (swapAmt > 0) {
-                int256[] memory deltas = swap(index, swapAmt, wrap);
+            
+            // Step 5: 실제 swap 실행
+            uint256 finalWrapped = IWrapped(tokensInfo[index].tokenA).balanceOf(address(this));
+            if (finalWrapped > 0) {
+                // SwapContract로 wrapped token 전송
+                IERC20(tokensInfo[index].tokenA).transfer(address(swapContract), finalWrapped);
+                
+                int256[] memory deltas = swap(index, finalWrapped, 0); // numWrap=0 since we already wrapped
                 emit BatchSwap(deltas[0], deltas[1], deltas[2]);
-                emit SwapInfo(index, amt, deltas[2] >= 0 ? uint256(deltas[2]) : uint256(-deltas[2]));
+                
+                // Safe absolute value conversion
+                uint256 absValue;
+                unchecked {
+                    if (deltas[2] >= 0) {
+                        absValue = uint256(deltas[2]);
+                    } else {
+                        int256 negValue = deltas[2];
+                        if (negValue == type(int256).min) {
+                            absValue = uint256(type(int256).max) + 1;
+                        } else {
+                            absValue = uint256(-negValue);
+                        }
+                    }
+                }
+                emit SwapInfo(index, amt, absValue);
             }
         }
     }
@@ -538,7 +611,17 @@ contract KVaultV2 is ERC4626FeesUpgradeable, OwnableUpgradeable {
 
 
     event Operator(uint256 indexed, address indexed);
+    event APYUpdated(uint256 indexed index, uint256 oldAPY, uint256 newAPY);
 
+    function _initDefaultAPY() private {
+        // Set default APY values (in percentage format with 2 decimals)
+        // Values are stored as basis points (multiply by 10)
+        // These are example values - should be updated with real APY data
+        lstAPY[0] = 500 * 10; // 5.00% -> stored as 5000 basis points
+        lstAPY[1] = 500 * 10; // 5.00% -> stored as 5000 basis points
+        lstAPY[2] = 500 * 10; // 5.00% -> stored as 5000 basis points
+        lstAPY[3] = 500 * 10; // 5.00% -> stored as 5000 basis points
+    }
 
     function initialize(
         IERC20 _asset,
@@ -559,6 +642,7 @@ contract KVaultV2 is ERC4626FeesUpgradeable, OwnableUpgradeable {
         
         swapContract = SwapContract(_swapContract);
         _initTokenInfo();
+        _initDefaultAPY();
     }
 
     receive() external payable {}
@@ -647,13 +731,43 @@ contract KVaultV2 is ERC4626FeesUpgradeable, OwnableUpgradeable {
 
     function setAPY(uint256 index, uint256 apy) public {
         require(operators[msg.sender], "");
+        require(index < 4, "Invalid index");
+        require(apy <= 10000, "APY too high"); // Max 100.00%
         /*
+         * APY format: percentage with 2 decimals (e.g., 5.25% = 525)
+         * Stored as basis points for calculations (525 -> 5250)
          * 0: KoKAIA (KommuneDAO)
          * 1: GCKAIA (Swapscanner)
          * 2: stKLAY (Kracker Labs)
          * 3: stKAIA (Lair Finance)
          */
-        lstAPY[index] = apy;
+        uint256 oldAPY = lstAPY[index] / 10;
+        lstAPY[index] = apy * 10; // Convert to basis points (525 -> 5250)
+        emit APYUpdated(index, oldAPY, apy);
+    }
+
+    function getAPY(uint256 index) public view returns (uint256) {
+        require(index < 4, "Invalid index");
+        return lstAPY[index] / 10; // Convert back to percentage format
+    }
+
+    function getAPYInBasisPoints(uint256 index) public view returns (uint256) {
+        require(index < 4, "Invalid index");
+        return lstAPY[index]; // Return raw basis points
+    }
+
+    function setMultipleAPY(uint256[4] calldata apyValues) external {
+        require(operators[msg.sender], "");
+        for (uint256 i = 0; i < 4; i++) {
+            require(apyValues[i] <= 10000, "APY too high");
+            uint256 oldAPY = lstAPY[i] / 10;
+            lstAPY[i] = apyValues[i] * 10;
+            emit APYUpdated(i, oldAPY, apyValues[i]);
+        }
+    }
+
+    function getAllAPY() external view returns (uint256[4] memory) {
+        return [lstAPY[0] / 10, lstAPY[1] / 10, lstAPY[2] / 10, lstAPY[3] / 10];
     }
 
     function addOperator(address addr) public onlyOwner {
