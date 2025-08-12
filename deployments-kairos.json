@@ -1,0 +1,18 @@
+{
+  "SwapContract": "0xe6DeC70339D50EDB68165920ca3E535bD795a056",
+  "TokenizedVault": "0x63bfc5f923963284D54BD8BE5d72CD95ec27e75c",
+  "KVaultV2": "0x5B699905d89870Af4453847f374f2073e8C311cB",
+  "deploymentInfo": {
+    "network": "kairos",
+    "chainId": 1001,
+    "deployer": "0xc88a8dDd9E56cC6a26404B6c412f2FCF290BdE3D",
+    "timestamp": "2025-08-12T01:35:11.588Z",
+    "parameters": {
+      "asset": "0x0339d5Eb6D195Ba90B13ed1BCeAa97EbD198b106",
+      "vault": "0x1c9074AA147648567015287B0d4185Cb4E04F86d",
+      "treasury": "0xDdb24eCaF1cCeF3dd3BcF2e2b93A231e809B89B0",
+      "basisPointsFees": 1000,
+      "investRatio": 10000
+    }
+  }
+}

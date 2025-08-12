@@ -1,17 +1,57 @@
 # Kommune-Fi AI Agent Smart Contracts
 
-ERC-4626 Tokenized Vault, Kaia GC Staking, Kommune-Fi Swamp
+ERC-4626 Tokenized Vault with APY-based multi-asset staking and smart swap functionality
 
-```shell
+## 🏗️ Architecture
 
+- **KVaultV2** (22.2 KiB): Main ERC4626 vault with multi-asset withdrawal and APY-based staking
+- **SwapContract** (4.2 KiB): Upgradeable Balancer DEX integration for token swaps
+
+## 🚀 Quick Start
+
+```bash
+# Install dependencies
 yarn install
 
+# Compile contracts
 yarn compile
 
-yarn deploy
+# Check contract sizes
+yarn sizetest
 
-yarn upgrade
+# Deploy to testnet (Kairos)
+yarn deploy-all:dev
+
+# Deploy to mainnet (Kaia)
+yarn deploy-all:prod
 ```
+
+## 📦 Available Commands
+
+### Deployment
+```bash
+# Full deployment (recommended)
+yarn deploy-all:dev      # Testnet
+yarn deploy-all:prod     # Mainnet
+
+# Individual deployment
+yarn deploy-swap:dev     # SwapContract only
+yarn deploy-vault:dev    # KVaultV2 only
+```
+
+### Upgrades
+```bash
+yarn upgrade-swap:dev    # Upgrade SwapContract
+yarn upgrade-vault:dev   # Upgrade KVaultV2
+```
+
+### Legacy (Deprecated)
+```bash
+yarn deploy:dev          # Old KommuneVault
+yarn upgrade:dev         # Old upgrade script
+```
+
+## 📋 For detailed deployment instructions, see [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md)
 
 Kommune Swap for Testnet
 ```
