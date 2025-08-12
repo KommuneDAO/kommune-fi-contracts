@@ -12,7 +12,7 @@ async function upgradeTokenizedVault(TokenizedVault) {
 
 async function main() {
   const deployments = JSON.parse(
-    fs.readFileSync(`deployments-${networkName}.json`, "utf8"),
+    fs.readFileSync(`deploy-${networkName}.json`, "utf8"),
   );
 
   await upgradeTokenizedVault(deployments.TokenizedVault);

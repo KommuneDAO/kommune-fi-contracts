@@ -26,4 +26,3 @@ contracts/artifacts
 /src/artifacts
 /.states
 /flatten/
-/deployments.json

@@ -52,7 +52,7 @@ async function main() {
     TokenizedVault: tokenizedVaultAddress,
   };
   fs.writeFileSync(
-    `deployments-${networkName}.json`,
+    `deploy-${networkName}.json`,
     JSON.stringify(deployments, null, 2),
   );
 }
