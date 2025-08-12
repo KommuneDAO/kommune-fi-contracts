@@ -206,12 +206,12 @@ console.log(`Current APYs: ${apys.map(apy => (Number(apy)/100).toFixed(2))}%`);
 
 ### 지원되는 프로토콜
 
-| Index | Protocol | Description |
-|-------|----------|-------------|
-| 0 | KoKAIA | KommuneDAO Liquid Staking |
-| 1 | GCKAIA | Swapscanner Governance Council |
-| 2 | stKLAY | Kracker Labs Klaytn Staking |
-| 3 | stKAIA | Lair Finance Kaia Staking |
+| Index | Protocol | Description                                |
+|-------|----------|--------------------------------------------|
+| 0 | KoKAIA | KommuneDAO &nbsp;&nbsp; https://kommunedao.xyz         |
+| 1 | GCKAIA | Swapscanner &nbsp;&nbsp;&nbsp;&nbsp; https://swapscanner.io    |
+| 2 | stKLAY | Kracker Labs &nbsp;&nbsp;&nbsp;&nbsp; https://stake.ly         |
+| 3 | stKAIA | Lair Finance &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; https://app.lair.fi/stake |
 
 ### APY 테스트 및 관리
 
