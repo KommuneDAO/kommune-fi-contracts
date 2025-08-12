@@ -26,6 +26,12 @@
     "test-apy:prod": "hardhat run ./scripts/testAPY.js --network kaia",
     "reset-apy:dev": "hardhat run ./scripts/resetAPY.js --network kairos",
     "reset-apy:prod": "hardhat run ./scripts/resetAPY.js --network kaia",
+    "test:basic": "hardhat run ./scripts/testSuite.js --network kairos",
+    "test:advanced": "hardhat run ./scripts/advancedTestSuite.js --network kairos",
+    "test:edge": "hardhat run ./scripts/edgeCaseTestSuite.js --network kairos",
+    "test:performance": "hardhat run ./scripts/performanceTestSuite.js --network kairos",
+    "test:all": "hardhat run ./scripts/runAllTests.js --network kairos",
+    "test:balancer": "hardhat run ./scripts/balancer-tests/checkBalancerPools.js --network kairos",
     "sizetest": "hardhat size-contracts --no-compile",
     "test": "hardhat test"
   },

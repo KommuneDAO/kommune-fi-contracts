@@ -17,36 +17,50 @@ SwapContract (4.2 KiB)
 Balancer Vault
 ```
 
-## 📦 Available Scripts
+## 📦 배포 스크립트
 
 ### Development (Kairos Testnet)
 
 ```bash
 # 전체 배포 (권장)
-yarn deploy-all:dev
+npx hardhat run scripts/deployAll.js --network kairos
 
 # 개별 배포
-yarn deploy-swap:dev      # SwapContract만 배포
-yarn deploy-vault:dev     # KVaultV2만 배포 (SwapContract가 먼저 배포되어야 함)
+npx hardhat run scripts/deploySwapContract.js --network kairos  # SwapContract만 배포
+npx hardhat run scripts/deployKVaultV2.js --network kairos      # KVaultV2만 배포
 
 # 업그레이드
-yarn upgrade-swap:dev     # SwapContract 업그레이드
-yarn upgrade-vault:dev    # KVaultV2 업그레이드
+npx hardhat run scripts/upgradeSwapContract.js --network kairos # SwapContract 업그레이드
+npx hardhat run scripts/upgradeKVaultV2.js --network kairos     # KVaultV2 업그레이드
 ```
 
 ### Production (Kaia Mainnet)
 
 ```bash
 # 전체 배포 (권장)
-yarn deploy-all:prod
+npx hardhat run scripts/deployAll.js --network kaia
 
 # 개별 배포
-yarn deploy-swap:prod      # SwapContract만 배포
-yarn deploy-vault:prod     # KVaultV2만 배포
+npx hardhat run scripts/deploySwapContract.js --network kaia    # SwapContract만 배포
+npx hardhat run scripts/deployKVaultV2.js --network kaia        # KVaultV2만 배포
 
 # 업그레이드
-yarn upgrade-swap:prod     # SwapContract 업그레이드
-yarn upgrade-vault:prod    # KVaultV2 업그레이드
+npx hardhat run scripts/upgradeSwapContract.js --network kaia   # SwapContract 업그레이드
+npx hardhat run scripts/upgradeKVaultV2.js --network kaia       # KVaultV2 업그레이드
+```
+
+### 레거시 yarn 명령 (여전히 사용 가능)
+
+```bash
+# Development
+yarn deploy-all:dev       # deployAll.js 실행
+yarn deploy-swap:dev      # deploySwapContract.js 실행
+yarn deploy-vault:dev     # deployKVaultV2.js 실행
+yarn upgrade-swap:dev     # upgradeSwapContract.js 실행
+yarn upgrade-vault:dev    # upgradeKVaultV2.js 실행
+
+# Production  
+yarn deploy-all:prod      # deployAll.js 실행 (mainnet)
 ```
 
 ## 📄 Deployment File Structure
@@ -84,23 +98,23 @@ yarn upgrade-vault:prod    # KVaultV2 업그레이드
 
 1. **전체 배포 (권장)**:
    ```bash
-   yarn deploy-all:dev
+   npx hardhat run scripts/deployAll.js --network kairos
    ```
 
 2. **단계별 배포**:
    ```bash
-   yarn deploy-swap:dev    # 먼저 SwapContract 배포
-   yarn deploy-vault:dev   # 그 다음 KVaultV2 배포
+   npx hardhat run scripts/deploySwapContract.js --network kairos  # 먼저 SwapContract 배포
+   npx hardhat run scripts/deployKVaultV2.js --network kairos      # 그 다음 KVaultV2 배포
    ```
 
 ### 업그레이드
 
 ```bash
 # SwapContract만 업그레이드
-yarn upgrade-swap:dev
+npx hardhat run scripts/upgradeSwapContract.js --network kairos
 
-# KVaultV2만 업그레이드
-yarn upgrade-vault:dev
+# KVaultV2만 업그레이드  
+npx hardhat run scripts/upgradeKVaultV2.js --network kairos
 ```
 
 ## ⚙️ Configuration
@@ -123,7 +137,7 @@ yarn upgrade-vault:dev
 
 1. **컨트랙트 크기**: `yarn sizetest`
 2. **배포 파일**: `deployments-{network}.json` 확인
-3. **프록시 정보**: `yarn getProxyInfo:dev` (또는 `getProxyInfo`)
+3. **프록시 정보**: `npx hardhat run scripts/getProxyInfo.js --network kairos`
 
 ## 🚨 Important Notes
 
@@ -148,7 +162,7 @@ Error: SwapContract address not found in deployments-kairos.json
 ```
 **해결책**: 먼저 SwapContract를 배포하세요
 ```bash
-yarn deploy-swap:dev
+npx hardhat run scripts/deploySwapContract.js --network kairos
 ```
 
 ### 배포 파일이 없음
@@ -157,7 +171,7 @@ Error: Deployment file not found
 ```
 **해결책**: 전체 배포를 실행하세요
 ```bash
-yarn deploy-all:dev
+npx hardhat run scripts/deployAll.js --network kairos
 ```
 
 ## 📊 Gas Usage
@@ -204,6 +218,8 @@ console.log(`Current APYs: ${apys.map(apy => (Number(apy)/100).toFixed(2))}%`);
 ```bash
 # APY 기능 테스트
 yarn test-apy:dev
+# 또는
+npx hardhat run scripts/testAPY.js --network kairos
 
 # APY 값 재설정 (필요시)
 npx hardhat run scripts/resetAPY.js --network kairos
@@ -215,6 +231,29 @@ npx hardhat run scripts/resetAPY.js --network kairos
 2. **출금 우선순위**: 낮은 APY 프로토콜부터 출금
 3. **자동 리밸런싱**: APY 변경 시 새로운 투자 분배 적용
 
+## 🧪 배포 후 테스트
+
+배포 완료 후 시스템 검증을 위해 테스트 실행:
+
+```bash
+# 기본 기능 테스트
+npx hardhat run scripts/testSuite.js --network kairos
+
+# 전체 통합 테스트
+npx hardhat run scripts/runAllTests.js --network kairos
+
+# Balancer 관련 테스트
+npx hardhat run scripts/balancer-tests/checkBalancerPools.js --network kairos
+```
+
+## 📚 관련 문서
+
+- **[scripts/README.md](./scripts/README.md)**: 전체 스크립트 구조 및 사용법
+- **[TEST_GUIDE.md](./TEST_GUIDE.md)**: 종합 테스트 실행 가이드
+- **[scripts/balancer-tests/README.md](./scripts/balancer-tests/README.md)**: Balancer 전용 테스트
+
 ---
 
-*이 문서는 KVaultV2 v1.1.0 (APY Management) 기준으로 작성되었습니다.*
+**마지막 업데이트**: 2025-01-12  
+**버전**: 2.0.0  
+**문서 기준**: 정리된 스크립트 구조
