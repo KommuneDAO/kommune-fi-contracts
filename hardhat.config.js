@@ -44,8 +44,8 @@ module.exports = {
       accounts: [KAIA_PRIVATE_KEY],
     },
     kairos: {
-      url: "https://responsive-green-emerald.kaia-kairos.quiknode.pro",
-      // url: "https://public-en-kairos.node.kaia.io",
+      // url: "https://responsive-green-emerald.kaia-kairos.quiknode.pro",
+      url: "https://public-en-kairos.node.kaia.io",
       chainId: 1001,
       accounts: [KAIROS_PRIVATE_KEY],
     },
