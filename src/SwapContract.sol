@@ -99,7 +99,7 @@ contract SwapContract is Initializable, OwnableUpgradeable {
         int256[] memory limits = new int256[](3);
         limits[tokenAIndex] = amountIn <= uint256(type(int256).max) ? int256(amountIn) : type(int256).max; // Max input for tokenA
         limits[tokenBIndex] = 0;                         // No limit for intermediate tokenB
-        uint256 minOutput = (amountIn * 50) / 100;       // 매우 관대한 50% 슬리피지 허용
+        uint256 minOutput = (amountIn * 80) / 100;       // 20% 슬리피지로 개선 (보안 강화)
         limits[tokenCIndex] = minOutput <= uint256(type(int256).max) ? -int256(minOutput) : type(int256).min; // Min output for tokenC
 
         IBalancerVault.FundManagement memory funds = IBalancerVault.FundManagement({

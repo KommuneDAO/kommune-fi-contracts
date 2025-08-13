@@ -8,8 +8,6 @@ import {IAsset, IBalancerVault} from "./interfaces/IBalancerVault.sol";
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC721Enumerable} from "@openzeppelin/contracts/token/ERC721/extensions/IERC721Enumerable.sol";
-
-import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import "./interfaces/IGcKaia.sol";
 import {IKoKaia} from "./interfaces/IKoKaia.sol";
 import "./interfaces/IStKaia.sol";
@@ -21,18 +19,27 @@ import {SwapContract} from "./SwapContract.sol";
 import {TokenInfo} from "./interfaces/ITokenInfo.sol";
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
+import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
+import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
 /// @dev ERC-4626 vault with entry/exit fees
 abstract contract ERC4626FeesUpgradeable is ERC4626Upgradeable {
     using Math for uint256;
 
     uint256 private constant _BASIS_POINT_SCALE = 1e4;
+    
+    // stKAIA protocol constants
+    address internal constant BugHole = 0x1856E6fDbF8FF701Fa1aB295E1bf229ABaB56899;
+    
     uint256 public basisPointsFees;
     uint256 public investRatio;
     address public treasury;
     address public vault;
     uint256 public depositLimit;
     uint256 private slippage;
+    
+    address public emergencyAdmin;
 
     mapping(uint256 => uint256) public lstAPY;
 
@@ -58,6 +65,8 @@ abstract contract ERC4626FeesUpgradeable is ERC4626Upgradeable {
     event InvestRatio(uint256 indexed);
     event Slippage(uint256 indexed);
     event MultiAssetWithdraw(uint256 indexed amt, uint256 indexed used, uint256 swp);
+    event StakingSuccess(uint256 indexed protocolIndex, uint256 amount);
+    event StakingFailed(uint256 indexed protocolIndex, uint256 amount, string reason);
 
     function _initTokenInfo() internal {
         uint256 id;
@@ -127,19 +136,25 @@ abstract contract ERC4626FeesUpgradeable is ERC4626Upgradeable {
         uint256 assets,
         uint256 shares
     ) internal virtual override {
-        require(
-            deposits[caller].amount + assets <= depositLimit,
-""
-        );
+        require(assets > 0, "AMP");
+        require(deposits[caller].amount + assets <= depositLimit, "DLE");
+        
+        uint256 newDepositAmount = deposits[caller].amount + assets;
+        require(newDepositAmount >= deposits[caller].amount, "DAO");
+        
         super._deposit(caller, receiver, assets, shares);
 
         uint256 amount = _portionOnRaw(assets, investRatio);
+        require(amount <= assets, "IAE");
 
+        uint256 balanceBefore = address(this).balance;
         IWKaia(asset()).withdraw(amount);
+        uint256 balanceAfter = address(this).balance;
+        require(balanceAfter >= balanceBefore + amount, "WWF");
 
         stake(amount);
 
-        deposits[caller].amount = deposits[caller].amount + assets;
+        deposits[caller].amount = newDepositAmount;
         deposits[caller].timestamp = block.timestamp;
     }
 
@@ -151,40 +166,65 @@ abstract contract ERC4626FeesUpgradeable is ERC4626Upgradeable {
         uint256 assets,
         uint256 shares
     ) internal virtual override {
+        require(assets > 0, "AMP");
         address recipient = treasury;
         uint256 max = maxWithdraw(caller);
+        require(max > 0, "NWA");
 
         uint256 balWKaia = IERC20(asset()).balanceOf(address(this));
         if (assets > balWKaia) {
             uint256 lack = assets - balWKaia;
-            (uint256 idx, uint256 avail) = selectAsset(lack);
-            if (avail >= lack) {
-                _performSmartSwap(idx, lack);
-            } else {
-                execWithdraw(lack);
+            
+            // First try to wrap native KAIA if available
+            uint256 nativeBalance = address(this).balance;
+            if (nativeBalance > 0) {
+                uint256 toWrap = nativeBalance >= lack ? lack : nativeBalance;
+                IWKaia(asset()).deposit{value: toWrap}();
+                lack = lack > toWrap ? lack - toWrap : 0;
             }
-            require(IERC20(asset()).balanceOf(address(this)) >= assets, "");
+            
+            // If still not enough, use LST swaps
+            if (lack > 0) {
+                (uint256 idx, uint256 avail) = selectAsset(lack);
+                if (avail >= lack) {
+                    _performSmartSwap(idx, lack);
+                } else {
+                    execWithdraw(lack);
+                }
+            }
+            require(IERC20(asset()).balanceOf(address(this)) >= assets, "IBA");
         }
 
         uint256 fee = 0;
         uint256 principal = assets;
-        if (max >= deposits[caller].amount) {
-            uint256 profit = (assets * (max - deposits[caller].amount)) /
-                max; // Profit included in assets
+        
+        if (max > deposits[caller].amount && max > 0) {
+            uint256 depositAmount = deposits[caller].amount;
+            require(max >= depositAmount, "IWC");
+            
+            uint256 profitMultiplier = max - depositAmount;
+            uint256 profit = (assets * profitMultiplier) / max;
+            require(profit <= assets, "PCO");
 
             fee = _feeOnTotal(profit, basisPointsFees);
+            require(assets >= profit, "APU");
             principal = assets - profit;
             emit Fee(profit, fee);
         }
 
+        require(assets >= fee, "FEA");
         super._withdraw(caller, receiver, owner, assets - fee, shares);
-        // 원금 제외, 수익에 대해서만 10%의 Protocol Fee 부과
+        
         if (fee > 0 && recipient != address(this)) {
+            require(IERC20(asset()).balanceOf(address(this)) >= fee, "IBF");
             SafeERC20.safeTransfer(IERC20(asset()), recipient, fee);
         }
 
-        (, uint256 remain) = deposits[caller].amount.trySub(principal);
-        deposits[caller].amount = remain;
+        if (principal <= deposits[caller].amount) {
+            deposits[caller].amount = deposits[caller].amount - principal;
+        } else {
+            deposits[caller].amount = 0;
+        }
         deposits[caller].timestamp = block.timestamp;
     }
 
@@ -203,8 +243,7 @@ assets.mulDiv(feeBasisPoints, _BASIS_POINT_SCALE, Math.Rounding.Ceil);
         uint256 assets,
         uint256 feeBasisPoints
     ) private pure returns (uint256) {
-        return
-assets.mulDiv(feeBasisPoints, feeBasisPoints + _BASIS_POINT_SCALE, Math.Rounding.Ceil);
+        return assets.mulDiv(feeBasisPoints, feeBasisPoints + _BASIS_POINT_SCALE, Math.Rounding.Ceil);
     }
 
     function _portionOnRaw(
@@ -218,8 +257,7 @@ assets.mulDiv(feeBasisPoints, feeBasisPoints + _BASIS_POINT_SCALE, Math.Rounding
         uint256 assets,
         uint256 ratio
     ) private pure returns (uint256) {
-        return
-assets.mulDiv(ratio, ratio + _BASIS_POINT_SCALE, Math.Rounding.Ceil);
+        return assets.mulDiv(ratio, ratio + _BASIS_POINT_SCALE, Math.Rounding.Ceil);
     }
 
     function totalAssets() public view override returns (uint256) {
@@ -260,12 +298,10 @@ assets.mulDiv(ratio, ratio + _BASIS_POINT_SCALE, Math.Rounding.Ceil);
     function swap(uint256 index, uint256 amountIn, uint256 numWrap) public returns (int256[] memory) {
         return swapContract.swap(tokensInfo[index], vault, amountIn, numWrap);
     }
-
     function estimateSwap(uint256 index, uint256 amountOut) public returns (uint256) {
-        uint256 result = swapContract.estimateSwap(tokensInfo[index], vault, amountOut);
-        emit EstimateSwap(index, int256(result), 0, 0);
-        return result;
+        return swapContract.estimateSwap(tokensInfo[index], vault, amountOut);
     }
+
 
     function setMaxDeposit(uint256 newValue) public virtual {
         depositLimit = newValue;
@@ -294,11 +330,11 @@ assets.mulDiv(ratio, ratio + _BASIS_POINT_SCALE, Math.Rounding.Ceil);
     {
         tw = 0;
         for (uint256 i = 0; i < 4; i++) {
-            // Use actual APY values for weight calculation (divide by 10 to get original percentage)
+            require(lstAPY[i] >= 10, "ATL");
             weights[i] = lstAPY[i] / 10;
             tw += weights[i];
         }
-        require(tw > 0, "");
+        require(tw > 0, "TWP");
     }
 
     function distAPY(
@@ -318,29 +354,54 @@ assets.mulDiv(ratio, ratio + _BASIS_POINT_SCALE, Math.Rounding.Ceil);
     }
 
     function stake(uint256 amount) internal {
+        require(amount > 0, "SMP");
+        require(address(this).balance >= amount, "IBS");
+        
         uint256[4] memory distributions = distAPY(amount);
+        uint256 totalDistributed = 0;
 
         for (uint256 i = 0; i < 4; i++) {
             if (distributions[i] > 0) {
+                require(tokensInfo[i].handler != address(0), "IHA");
+                
+                uint256 balanceBefore = IERC20(tokensInfo[i].asset).balanceOf(address(this));
+                uint256 ethBalanceBefore = address(this).balance;
+                
+                bool success = false;
                 if (i == 0) {
-                    IKoKaia(tokensInfo[i].handler).stake{
-                        value: distributions[i]
-                    }();
+                    try IKoKaia(tokensInfo[i].handler).stake{value: distributions[i]}() {
+                        success = true;
+                    } catch {}
                 } else if (i == 1) {
-                    IGcKaia(tokensInfo[i].handler).stake{
-                        value: distributions[i]
-                    }();
+                    try IGcKaia(tokensInfo[i].handler).stake{value: distributions[i]}() {
+                        success = true;
+                    } catch {}
                 } else if (i == 2) {
-                    IStKlay(tokensInfo[i].handler).stake{
-                        value: distributions[i]
-                    }();
+                    try IStKlay(tokensInfo[i].handler).stake{value: distributions[i]}() {
+                        success = true;
+                    } catch {}
                 } else if (i == 3) {
-                    IStKaia(tokensInfo[i].handler).stake{
-                        value: distributions[i]
-                    }();
+                    try IStKaia(tokensInfo[i].handler).stake{value: distributions[i]}() {
+                        success = true;
+                    } catch {}
+                }
+                
+                if (success) {
+                    uint256 balanceAfter = IERC20(tokensInfo[i].asset).balanceOf(address(this));
+                    uint256 ethBalanceAfter = address(this).balance;
+                    
+                    require(
+                        balanceAfter > balanceBefore || ethBalanceAfter == ethBalanceBefore - distributions[i],
+                        "SVF"
+                    );
+                    
+                    totalDistributed += distributions[i];
+                    emit StakingSuccess(i, distributions[i]);
                 }
             }
         }
+        
+        require(totalDistributed > 0, "NSO");
     }
 
     struct AssetBalance {
@@ -467,15 +528,20 @@ assets.mulDiv(ratio, ratio + _BASIS_POINT_SCALE, Math.Rounding.Ceil);
     }
 
     function getSorted() internal view returns (uint256[4] memory sorted) {
-        // Use actual APY values for sorting (safely divide by 10 to get original percentage)
-        uint256[4] memory apys = [
-            lstAPY[0] > 0 ? lstAPY[0] / 10 : 0, 
-            lstAPY[1] > 0 ? lstAPY[1] / 10 : 0, 
-            lstAPY[2] > 0 ? lstAPY[2] / 10 : 0, 
-            lstAPY[3] > 0 ? lstAPY[3] / 10 : 0
-        ];
+        // Use actual APY values for sorting with safe division
+        uint256[4] memory apys;
+        for (uint256 i = 0; i < 4; i++) {
+            if (lstAPY[i] >= 10) {
+                apys[i] = lstAPY[i] / 10;
+                // Verify no overflow occurred
+                require(apys[i] <= lstAPY[i], "APY division overflow");
+            } else {
+                apys[i] = 0;
+            }
+        }
         sorted = [uint256(0), 1, 2, 3];
 
+        // Bubble sort with bounds checking
         for (uint256 i = 0; i < 3; i++) {
             for (uint256 j = 0; j < 3 - i; j++) {
                 if (apys[j] > apys[j + 1]) {
@@ -525,18 +591,17 @@ assets.mulDiv(ratio, ratio + _BASIS_POINT_SCALE, Math.Rounding.Ceil);
             if (needed > 0) {
                 IERC20(tokensInfo[index].asset).approve(tokensInfo[index].handler, 0);
                 IERC20(tokensInfo[index].asset).approve(tokensInfo[index].handler, needed);
-                IStKaia(tokensInfo[index].handler).unstake(0x1856E6fDbF8FF701Fa1aB295E1bf229ABaB56899, address(this), needed);
+                IStKaia(tokensInfo[index].handler).unstake(BugHole, address(this), needed);
 
                 uint256 kaia = address(this).balance;
                 if (kaia > 0) IWKaia(asset()).deposit{value: kaia}();
             }
         } else {
-            // Step 1: estimateSwap으로 필요한 wrapped token 양 계산
             uint256 requiredWrapped;
             try this.estimateSwap(index, amt) returns (uint256 estimated) {
-                requiredWrapped = (estimated * 105) / 100; // 5% buffer for safety
+                requiredWrapped = (estimated * 105) / 100;
             } catch {
-                requiredWrapped = (amt * 120) / 100; // More conservative fallback
+                requiredWrapped = (amt * 120) / 100;
             }
             
             // Step 2: 현재 wrapped balance 확인
@@ -582,18 +647,17 @@ assets.mulDiv(ratio, ratio + _BASIS_POINT_SCALE, Math.Rounding.Ceil);
                 int256[] memory deltas = swap(index, finalWrapped, 0); // numWrap=0 since we already wrapped
                 emit BatchSwap(deltas[0], deltas[1], deltas[2]);
                 
-                // Safe absolute value conversion
+                // Safe absolute value conversion using SafeCast
                 uint256 absValue;
-                unchecked {
-                    if (deltas[2] >= 0) {
-                        absValue = uint256(deltas[2]);
+                if (deltas[2] >= 0) {
+                    absValue = SafeCast.toUint256(deltas[2]);
+                } else {
+                    // Handle negative values safely
+                    if (deltas[2] == type(int256).min) {
+                        // Special case: type(int256).min cannot be negated safely
+                        revert("Swap delta too negative");
                     } else {
-                        int256 negValue = deltas[2];
-                        if (negValue == type(int256).min) {
-                            absValue = uint256(type(int256).max) + 1;
-                        } else {
-                            absValue = uint256(-negValue);
-                        }
+                        absValue = SafeCast.toUint256(-deltas[2]);
                     }
                 }
                 emit SwapInfo(index, amt, absValue);
@@ -602,25 +666,24 @@ assets.mulDiv(ratio, ratio + _BASIS_POINT_SCALE, Math.Rounding.Ceil);
     }
 }
 
-contract KVaultV2 is ERC4626FeesUpgradeable, OwnableUpgradeable {
+contract KVaultV2 is ERC4626FeesUpgradeable, OwnableUpgradeable, ReentrancyGuardUpgradeable, PausableUpgradeable {
     using Math for uint256;
     address payable public vaultOwner;
-    int constant V = 2;
+    
 
     mapping(address => bool) public operators;
 
 
     event Operator(uint256 indexed, address indexed);
     event APYUpdated(uint256 indexed index, uint256 oldAPY, uint256 newAPY);
+    event EmergencyPause(address indexed admin, uint256 timestamp);
+    event EmergencyUnpause(address indexed admin, uint256 timestamp);
 
     function _initDefaultAPY() private {
-        // Set default APY values (in percentage format with 2 decimals)
-        // Values are stored as basis points (multiply by 10)
-        // These are example values - should be updated with real APY data
-        lstAPY[0] = 500 * 10; // 5.00% -> stored as 5000 basis points
-        lstAPY[1] = 500 * 10; // 5.00% -> stored as 5000 basis points
-        lstAPY[2] = 500 * 10; // 5.00% -> stored as 5000 basis points
-        lstAPY[3] = 500 * 10; // 5.00% -> stored as 5000 basis points
+        lstAPY[0] = 5000;
+        lstAPY[1] = 5000;
+        lstAPY[2] = 5000;
+        lstAPY[3] = 5000;
     }
 
     function initialize(
@@ -635,10 +698,12 @@ contract KVaultV2 is ERC4626FeesUpgradeable, OwnableUpgradeable {
         __ERC4626_init(_asset);
         __ERC4626Fees_init(basisPointsFees, investRatio, treasury, vault);
         __Ownable_init(msg.sender);
+        __ReentrancyGuard_init();
+        __Pausable_init();
 
         vaultOwner = payable(msg.sender);
         operators[msg.sender] = true;
-        operators[0x5415a7f2556170CbB001B7a72b2d972362839FbE] = true;
+        emergencyAdmin = msg.sender;
         
         swapContract = SwapContract(_swapContract);
         _initTokenInfo();
@@ -647,163 +712,77 @@ contract KVaultV2 is ERC4626FeesUpgradeable, OwnableUpgradeable {
 
     receive() external payable {}
 
-    // TODO : TokenA → Pool1 → TokenB → Pool2 → TokenC
-    //    function performBatchSwap(
-    //        uint256 index,
-    //        uint256 amountIn
-    //    ) external returns (int256[] memory) {
-    //        // wrap Asset
-    //        uint256 amount = amountIn +
-    //            amountIn.mulDiv(1500, 10000, Math.Rounding.Ceil);
-    //        IERC20(tokensInfo[index].asset).approve(
-    //            tokensInfo[index].tokenA,
-    //            amount
-    //        );
-    //        IWrapped(tokensInfo[index].tokenA).wrap(amount);
-    //
-    //    //        IERC20(tokensInfo[index].tokenA).approve(address(vault), amountIn);
-    //
-    //        // Prepare assets (as IAsset)
-    //        IAsset[] memory assets = new IAsset[](3);
-    //        assets[0] = IAsset(tokensInfo[index].tokenA);
-    //        assets[1] = IAsset(tokensInfo[index].tokenB);
-    //        assets[2] = IAsset(tokensInfo[index].tokenC);
-    //
-    //        // Set up BatchSwapStep[]
-    //        IBalancerVault.BatchSwapStep[]
-    //            memory steps = new IBalancerVault.BatchSwapStep[](2);
-    //        steps[0] = IBalancerVault.BatchSwapStep({
-    //            poolId: tokensInfo[index].pool1,
-    //            assetInIndex: 0,
-    //            assetOutIndex: 1,
-    //            amount: amountIn,
-    //        });
-    //
-    //        steps[1] = IBalancerVault.BatchSwapStep({
-    //            poolId: tokensInfo[index].pool2,
-    //            assetInIndex: 1,
-    //            assetOutIndex: 2,
-    //            amount: 0, // for multihop, set 0
-    //        });
-    //
-    //        // Limit: positive = max input, negative = min output
-    //        int256[] memory limits = new int256[](3);
-    //        limits[0] = int256(amountIn); // max amountIn
-    //        limits[1] = 0; // intermediate
-    //        limits[2] = -1_000_000_000; // minimum amountOut (accept anything > 0)
-    //
-    //        // Fund setup
-    //        IBalancerVault.FundManagement memory funds = IBalancerVault
-    //            .FundManagement({
-    //                sender: address(this),
-    //                fromInternalBalance: false,
-    //                recipient: msg.sender,
-    //                toInternalBalance: false
-    //            });
-    //
-    //        // Execute swap
-    //        return
-    //            IBalancerVault(vault).batchSwap(
-    //                IBalancerVault.SwapKind.GIVEN_IN,
-    //                steps,
-    //                assets,
-    //                funds,
-    //                limits,
-    //                block.timestamp + 600
-    //            );
-    //    }
-
-    function setMaxDeposit(uint256 newValue) public override onlyOwner {
-        super.setMaxDeposit(newValue);
+    // Override ERC4626 functions to add security modifiers
+    function deposit(uint256 assets, address receiver) public virtual override nonReentrant whenNotPaused returns (uint256) {
+        return super.deposit(assets, receiver);
     }
 
-    function setBasisPointsFees(uint256 newValue) public override onlyOwner {
-        super.setBasisPointsFees(newValue);
+    function mint(uint256 shares, address receiver) public virtual override nonReentrant whenNotPaused returns (uint256) {
+        return super.mint(shares, receiver);
     }
 
-    function setInvestRatio(uint256 newValue) public override onlyOwner {
-        super.setInvestRatio(newValue);
+    function withdraw(uint256 assets, address receiver, address owner) public virtual override nonReentrant whenNotPaused returns (uint256) {
+        return super.withdraw(assets, receiver, owner);
     }
 
-    function version() public pure returns (int) {
-        return 2;
+    function redeem(uint256 shares, address receiver, address owner) public virtual override nonReentrant whenNotPaused returns (uint256) {
+        return super.redeem(shares, receiver, owner);
     }
 
-    function setAPY(uint256 index, uint256 apy) public {
-        require(operators[msg.sender], "");
-        require(index < 4, "Invalid index");
-        require(apy <= 10000, "APY too high"); // Max 100.00%
-        /*
-         * APY format: percentage with 2 decimals (e.g., 5.25% = 525)
-         * Stored as basis points for calculations (525 -> 5250)
-         * 0: KoKAIA (KommuneDAO)
-         * 1: GCKAIA (Swapscanner)
-         * 2: stKLAY (Kracker Labs)
-         * 3: stKAIA (Lair Finance)
-         */
+
+
+    
+    function setAPY(uint256 index, uint256 apy) public onlyOwner {
+        require(index < 4, "IPI");
+        require(apy <= 10000, "APY");
+        
         uint256 oldAPY = lstAPY[index] / 10;
-        lstAPY[index] = apy * 10; // Convert to basis points (525 -> 5250)
+        lstAPY[index] = apy * 10;
         emit APYUpdated(index, oldAPY, apy);
     }
 
     function getAPY(uint256 index) public view returns (uint256) {
-        require(index < 4, "Invalid index");
-        return lstAPY[index] / 10; // Convert back to percentage format
+        require(index < 4, "II");
+        return lstAPY[index] / 10;
     }
-
-    function getAPYInBasisPoints(uint256 index) public view returns (uint256) {
-        require(index < 4, "Invalid index");
-        return lstAPY[index]; // Return raw basis points
-    }
-
-    function setMultipleAPY(uint256[4] calldata apyValues) external {
-        require(operators[msg.sender], "");
+    function setMultipleAPY(uint256[4] calldata apyValues) external onlyOwner {
         for (uint256 i = 0; i < 4; i++) {
-            require(apyValues[i] <= 10000, "APY too high");
+            require(apyValues[i] <= 10000, "APY");
             uint256 oldAPY = lstAPY[i] / 10;
             lstAPY[i] = apyValues[i] * 10;
             emit APYUpdated(i, oldAPY, apyValues[i]);
         }
     }
 
-    function getAllAPY() external view returns (uint256[4] memory) {
-        return [lstAPY[0] / 10, lstAPY[1] / 10, lstAPY[2] / 10, lstAPY[3] / 10];
-    }
 
     function addOperator(address addr) public onlyOwner {
         operators[addr] = true;
         emit Operator(1, addr);
     }
 
-    function removeOperator(address addr) public onlyOwner {
-        operators[addr] = false;
-        emit Operator(2, addr);
+    
+    function emergencyPause() external {
+        require(msg.sender == emergencyAdmin || msg.sender == owner(), "NA");
+        _pause();
+        emit EmergencyPause(msg.sender, block.timestamp);
+    }
+    function emergencyUnpause() external onlyOwner {
+        _unpause();
+        emit EmergencyUnpause(msg.sender, block.timestamp);
     }
 
-    function unstake(uint256 index, uint256 amount) public onlyOwner {
-        if (index == 0) {
-            IKoKaia(tokensInfo[index].handler).unstake(amount);
-        }
-        if (index == 1) {
-            IGcKaia(tokensInfo[index].handler).unstake(amount);
-        }
-        if (index == 2) {
-            IStKlay(tokensInfo[index].handler).unstake(amount);
-        }
-        if (index == 3) {
-            IStKaia(tokensInfo[index].handler).unstake(
-                0x1856E6fDbF8FF701Fa1aB295E1bf229ABaB56899, // BugHole
-                msg.sender,
-                amount
-            );
-        }
+    function unstake(uint256 index, uint256 amount) public onlyOwner nonReentrant {
+        require(index < 4, "II");
+        if (index == 0) IKoKaia(tokensInfo[index].handler).unstake(amount);
+        else if (index == 1) IGcKaia(tokensInfo[index].handler).unstake(amount);
+        else if (index == 2) IStKlay(tokensInfo[index].handler).unstake(amount);
+        else IStKaia(tokensInfo[index].handler).unstake(BugHole, msg.sender, amount);
     }
 
-    function claim(uint256 index, address user) public onlyOwner {
-        if (index == 0) {
-            IKoKaia(tokensInfo[index].handler).claim(user);
-        }
-        if (index == 1) {
+    function claim(uint256 index, address user) public onlyOwner nonReentrant {
+        require(index < 4, "II");
+        if (index == 0) IKoKaia(tokensInfo[index].handler).claim(user);
+        else if (index == 1) {
             uint256 id;
             assembly {
                 id := chainid()
@@ -814,50 +793,30 @@ contract KVaultV2 is ERC4626FeesUpgradeable, OwnableUpgradeable {
                 );
                 uint256 count = uGCKAIA.balanceOf(user);
                 uint256[] memory ids = new uint256[](count);
-
                 for (uint256 i; i < count; ++i) {
                     ids[i] = uGCKAIA.tokenOfOwnerByIndex(user, i);
                 }
                 for (uint256 i; i < count; ++i) {
-                    // How to check it is over 1 week ?
-                    uint256 value;
-                    uint256 withdrawableFrom;
-                    WithdrawalRequestState state;
-                    // uint256 stakeLockup = IGcKaia(tokensInfo[index].handler)
-                    //     .withdrawalRequestTTL();
-
-                    (value, withdrawableFrom, state) = IGcKaia(
+                    (,uint256 withdrawableFrom, WithdrawalRequestState state) = IGcKaia(
                         tokensInfo[index].handler
                     ).withdrawalRequestInfo(ids[i]);
-                    if (state == WithdrawalRequestState.Unknown) {
-                        // if (withdrawableFrom + stakeLockup < block.timestamp) {
-                        // // Expired - restake
-                        // } else
-                        if (withdrawableFrom < block.timestamp) {
-                            IGcKaia(tokensInfo[index].handler).claim(ids[i]);
-                        }
-                        // else {
-                        // // Pending - not yet claimable
-                        // }
+                    if (state == WithdrawalRequestState.Unknown && withdrawableFrom < block.timestamp) {
+                        IGcKaia(tokensInfo[index].handler).claim(ids[i]);
                     }
                 }
             }
         }
-        if (index == 2) {
-            IStKlay(tokensInfo[index].handler).claim(user);
-        }
-        if (index == 3) {
+        else if (index == 2) IStKlay(tokensInfo[index].handler).claim(user);
+        else if (index == 3) {
             uint256 length = IStKaia(tokensInfo[index].handler)
                 .getUnstakeRequestInfoLength(user);
             UnstakeInfo[] memory infos = IStKaia(tokensInfo[index].handler)
                 .getUnstakeInfos(
                     user,
-                    0, // 1st page
+                    0,
                     length
                 );
-
             for (uint256 i; i < infos.length; ++i) {
-                // Over 1 week
                 if (infos[i].unstakeTime + 604800 < block.timestamp) {
                     IStKaia(tokensInfo[index].handler).claim(
                         user,
