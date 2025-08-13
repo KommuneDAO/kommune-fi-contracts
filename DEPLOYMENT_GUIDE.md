@@ -10,7 +10,7 @@ KVaultV2 시스템은 두 개의 독립적인 upgradeable 컨트랙트로 구성
 ## 🏗️ Architecture
 
 ```
-KVaultV2 (22.2 KiB)
+KVaultV2 (23.7 KiB with optimizer runs=200)
     ↓ delegates to
 SwapContract (4.2 KiB)
     ↓ interacts with
@@ -23,45 +23,36 @@ Balancer Vault
 
 ```bash
 # 전체 배포 (권장)
+yarn deploy-all:dev
+# 또는
 npx hardhat run scripts/deployAll.js --network kairos
 
 # 개별 배포
-npx hardhat run scripts/deploySwapContract.js --network kairos  # SwapContract만 배포
-npx hardhat run scripts/deployKVaultV2.js --network kairos      # KVaultV2만 배포
+yarn deploy-swap:dev      # SwapContract만 배포
+yarn deploy-vault:dev     # KVaultV2만 배포
 
 # 업그레이드
-npx hardhat run scripts/upgradeSwapContract.js --network kairos # SwapContract 업그레이드
-npx hardhat run scripts/upgradeKVaultV2.js --network kairos     # KVaultV2 업그레이드
+yarn upgrade-swap:dev     # SwapContract 업그레이드
+yarn upgrade-vault:dev    # KVaultV2 업그레이드
 ```
 
 ### Production (Kaia Mainnet)
 
 ```bash
 # 전체 배포 (권장)
+yarn deploy-all:prod
+# 또는
 npx hardhat run scripts/deployAll.js --network kaia
 
 # 개별 배포
-npx hardhat run scripts/deploySwapContract.js --network kaia    # SwapContract만 배포
-npx hardhat run scripts/deployKVaultV2.js --network kaia        # KVaultV2만 배포
+yarn deploy-swap:prod     # SwapContract만 배포
+yarn deploy-vault:prod    # KVaultV2만 배포
 
 # 업그레이드
-npx hardhat run scripts/upgradeSwapContract.js --network kaia   # SwapContract 업그레이드
-npx hardhat run scripts/upgradeKVaultV2.js --network kaia       # KVaultV2 업그레이드
+yarn upgrade-swap:prod    # SwapContract 업그레이드
+yarn upgrade-vault:prod   # KVaultV2 업그레이드
 ```
 
-### 레거시 yarn 명령 (여전히 사용 가능)
-
-```bash
-# Development
-yarn deploy-all:dev       # deployAll.js 실행
-yarn deploy-swap:dev      # deploySwapContract.js 실행
-yarn deploy-vault:dev     # deployKVaultV2.js 실행
-yarn upgrade-swap:dev     # upgradeSwapContract.js 실행
-yarn upgrade-vault:dev    # upgradeKVaultV2.js 실행
-
-# Production  
-yarn deploy-all:prod      # deployAll.js 실행 (mainnet)
-```
 
 ## 📄 Deployment File Structure
 
@@ -123,13 +114,14 @@ npx hardhat run scripts/upgradeKVaultV2.js --network kairos
 
 - `config/constants.js`: 컨트랙트 주소, 수수료, 비율 등
 - `config/config.js`: RPC URL 등 네트워크 설정
+- `hardhat.config.js`: QuickNode RPC 사용 (Kairos: https://responsive-green-emerald.kaia-kairos.quiknode.pro)
 - `.env`: Private Key 등 민감한 정보
 
 ## 🔍 Contract Sizes
 
-- **KVaultV2**: 22.213 KiB (24.576 KiB 한도 내)
-- **SwapContract**: 4.164 KiB
-- **Total**: 26.377 KiB
+- **KVaultV2**: 23.703 KiB (24.576 KiB 한도 내) - optimizer runs=200
+- **SwapContract**: 4.164 KiB - optimizer runs=200
+- **Total**: 27.867 KiB
 
 ## ✅ Deployment Verification
 
@@ -146,13 +138,6 @@ npx hardhat run scripts/upgradeKVaultV2.js --network kairos
 3. **백업**: 업그레이드 전 현재 컨트랙트 상태 백업
 4. **테스트**: 메인넷 배포 전 반드시 테스트넷에서 테스트
 
-## 📱 Legacy Scripts
-
-기존 스크립트들은 여전히 사용 가능하지만 deprecated 메시지와 함께 실행됩니다:
-
-```bash
-yarn deploy2:dev    # ⚠️ Deprecated - yarn deploy-all:dev 사용 권장
-```
 
 ## 🛠️ Troubleshooting
 
@@ -185,7 +170,7 @@ npx hardhat run scripts/deployAll.js --network kairos
 | APY Update (single) | ~50K gas |
 | APY Update (batch) | ~150K gas |
 
-## 📈 APY Management
+## 📊 APY Management
 
 ### APY 형식 및 설정
 
@@ -242,18 +227,17 @@ npx hardhat run scripts/testSuite.js --network kairos
 # 전체 통합 테스트
 npx hardhat run scripts/runAllTests.js --network kairos
 
-# Balancer 관련 테스트
-npx hardhat run scripts/balancer-tests/checkBalancerPools.js --network kairos
+# 통합 테스트
+yarn test:integration
 ```
 
 ## 📚 관련 문서
 
 - **[scripts/README.md](./scripts/README.md)**: 전체 스크립트 구조 및 사용법
 - **[TEST_GUIDE.md](./TEST_GUIDE.md)**: 종합 테스트 실행 가이드
-- **[scripts/balancer-tests/README.md](./scripts/balancer-tests/README.md)**: Balancer 전용 테스트
 
 ---
 
-**마지막 업데이트**: 2025-01-12  
-**버전**: 2.0.0  
-**문서 기준**: 정리된 스크립트 구조
+**마지막 업데이트**: 2025-08-13  
+**버전**: 2.1.0  
+**문서 기준**: 정리된 프로젝트 구조 (optimizer runs=200)

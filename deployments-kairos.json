@@ -1,11 +1,11 @@
 {
-  "SwapContract": "0xe6DeC70339D50EDB68165920ca3E535bD795a056",
-  "KVaultV2": "0x7e5091727d799F6D30F60cb7373B4F56bcfa746b",
+  "SwapContract": "0x7C755d984352cdEcCcae5137483ab1bd1Cd618DA",
+  "KVaultV2": "0x77270A884A3Cb595Af3F57Dc795bAC3E14Ab23e8",
   "deploymentInfo": {
     "network": "kairos",
     "chainId": 1001,
-    "deployer": "0xc88a8dDd9E56cC6a26404B6c412f2FCF290BdE3D",
-    "timestamp": "2025-08-12T01:35:11.588Z",
+    "deployer": "0xdc926E34E73292cD7c48c6fD7375af7D93435D36",
+    "timestamp": "2025-08-13T16:35:37.663Z",
     "parameters": {
       "asset": "0x0339d5Eb6D195Ba90B13ed1BCeAa97EbD198b106",
       "vault": "0x1c9074AA147648567015287B0d4185Cb4E04F86d",
@@ -13,101 +13,5 @@
       "basisPointsFees": 1000,
       "investRatio": 10000
     }
-  },
-  "upgradeHistory": {
-    "KVaultV2": [
-      {
-        "timestamp": "2025-08-12T03:54:49.521Z",
-        "network": "kairos",
-        "upgrader": "unknown"
-      },
-      {
-        "timestamp": "2025-08-12T03:59:56.886Z",
-        "network": "kairos",
-        "upgrader": "unknown"
-      },
-      {
-        "timestamp": "2025-08-12T04:55:52.475Z",
-        "network": "kairos",
-        "upgrader": "unknown"
-      },
-      {
-        "timestamp": "2025-08-12T04:59:59.712Z",
-        "network": "kairos",
-        "upgrader": "unknown"
-      },
-      {
-        "timestamp": "2025-08-12T05:06:54.295Z",
-        "network": "kairos",
-        "upgrader": "unknown"
-      },
-      {
-        "timestamp": "2025-08-12T05:13:17.524Z",
-        "network": "kairos",
-        "upgrader": "unknown"
-      },
-      {
-        "timestamp": "2025-08-12T07:01:49.608Z",
-        "network": "kairos",
-        "upgrader": "unknown"
-      },
-      {
-        "timestamp": "2025-08-12T07:03:40.425Z",
-        "network": "kairos",
-        "upgrader": "unknown"
-      },
-      {
-        "timestamp": "2025-08-12T07:19:33.610Z",
-        "network": "kairos",
-        "upgrader": "unknown"
-      },
-      {
-        "timestamp": "2025-08-12T07:25:29.291Z",
-        "network": "kairos",
-        "upgrader": "unknown"
-      },
-      {
-        "timestamp": "2025-08-12T07:30:39.035Z",
-        "network": "kairos",
-        "upgrader": "unknown"
-      }
-    ],
-    "SwapContract": [
-      {
-        "timestamp": "2025-08-12T05:18:20.557Z",
-        "network": "kairos",
-        "upgrader": "unknown"
-      },
-      {
-        "timestamp": "2025-08-12T05:30:04.339Z",
-        "network": "kairos",
-        "upgrader": "unknown"
-      },
-      {
-        "timestamp": "2025-08-12T08:15:07.561Z",
-        "network": "kairos",
-        "upgrader": "unknown"
-      },
-      {
-        "timestamp": "2025-08-12T08:16:40.025Z",
-        "network": "kairos",
-        "upgrader": "unknown"
-      },
-      {
-        "timestamp": "2025-08-12T08:17:32.435Z",
-        "network": "kairos",
-        "upgrader": "unknown"
-      },
-      {
-        "timestamp": "2025-08-12T08:19:59.117Z",
-        "network": "kairos",
-        "upgrader": "unknown"
-      },
-      {
-        "timestamp": "2025-08-12T08:21:07.216Z",
-        "network": "kairos",
-        "upgrader": "unknown"
-      }
-    ]
   }
 }

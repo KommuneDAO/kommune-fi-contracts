@@ -67,6 +67,8 @@ abstract contract ERC4626FeesUpgradeable is ERC4626Upgradeable {
     event MultiAssetWithdraw(uint256 indexed amt, uint256 indexed used, uint256 swp);
     event StakingSuccess(uint256 indexed protocolIndex, uint256 amount);
     event StakingFailed(uint256 indexed protocolIndex, uint256 amount, string reason);
+    event LSTWrapped(uint256 indexed protocolIndex, uint256 lstAmount, uint256 wrappedAmount);
+    event LSTWrapFailed(uint256 indexed protocolIndex, uint256 amount, string reason);
 
     function _initTokenInfo() internal {
         uint256 id;
@@ -91,11 +93,18 @@ abstract contract ERC4626FeesUpgradeable is ERC4626Upgradeable {
         address[4] memory handlers = [0xb15782EFbC2034E366670599F3997f94c7333FF9, 0xe4c732f651B39169648A22F159b815d8499F996c, 0x28B13a88E72a2c8d6E93C28dD39125705d78E75F, 0x4C0d434C7DD74491A52375163a7b724ED387d0b6];
         address[4] memory assets = [0xb15782EFbC2034E366670599F3997f94c7333FF9, 0x4EC04F4D46D7e34EBf0C3932B65068168FDcE7f6, 0x524dCFf07BFF606225A4FA76AFA55D705B052004, 0x45886b01276c45Fe337d3758b94DD8D7F3951d97];
         address[4] memory tokenAs = [0x9a93e2fcDEBE43d0f8205D1cd255D709B7598317, 0x324353670B23b16DFacBDE169Cd8ebF8C8bf6601, 0x474B49DF463E528223F244670e332fE82742e1aA, 0x45886b01276c45Fe337d3758b94DD8D7F3951d97];
-        bytes32 pool1_0 = 0x8193fe745f2784b1f55e51f71145d2b8b0739b8100020000000000000000000e;
+        // Correct pool IDs from successful Balancer UI transactions
+        bytes32 pool1_wKoKAIA = 0xdc1503e263d3cf33cf37fb4e5ca953ef20c9e5bb000200000000000000000018;
+        bytes32 pool2_wKoKAIA = 0xc51ebf09fc3f6b2f02b3a1e957a39f88b019e6ae000200000000000000000003;
         bytes32 pool1_other = 0x7a665fb838477cbf719f5f34af4b7c1faebb7112000100000000000000000014;
-        bytes32 pool2 = 0x0c5da2fa11fc2d7eee16c06740072e3c5e1bb4a7000200000000000000000001;
-        for (uint i = 0; i < 4; i++) {
-            tokensInfo[i] = TokenInfo(handlers[i], assets[i], tokenAs[i], 0x985acD34f36D91768aD4b0cB295Aa919A7ABDb27, 0x0339d5Eb6D195Ba90B13ed1BCeAa97EbD198b106, i == 0 ? pool1_0 : pool1_other, pool2);
+        bytes32 pool2_other = 0x0c5da2fa11fc2d7eee16c06740072e3c5e1bb4a7000200000000000000000001;
+        
+        // Set correct pools for each LST
+        // wKoKAIA (index 0) uses different pools
+        tokensInfo[0] = TokenInfo(handlers[0], assets[0], tokenAs[0], 0xe8A9F4EB1215dd3EeD0E36D5ca82728DC93f0B48, 0x0339d5Eb6D195Ba90B13ed1BCeAa97EbD198b106, pool1_wKoKAIA, pool2_wKoKAIA);
+        // wGCKAIA, wstKLAY, stKAIA (indices 1-3) use the same pools
+        for (uint i = 1; i < 4; i++) {
+            tokensInfo[i] = TokenInfo(handlers[i], assets[i], tokenAs[i], 0x985acD34f36D91768aD4b0cB295Aa919A7ABDb27, 0x0339d5Eb6D195Ba90B13ed1BCeAa97EbD198b106, pool1_other, pool2_other);
         }
     }
 
@@ -168,7 +177,7 @@ abstract contract ERC4626FeesUpgradeable is ERC4626Upgradeable {
     ) internal virtual override {
         require(assets > 0, "AMP");
         address recipient = treasury;
-        uint256 max = maxWithdraw(caller);
+        uint256 max = maxWithdraw(owner);  // Fixed: use owner instead of caller
         require(max > 0, "NWA");
 
         uint256 balWKaia = IERC20(asset()).balanceOf(address(this));
@@ -192,14 +201,22 @@ abstract contract ERC4626FeesUpgradeable is ERC4626Upgradeable {
                     execWithdraw(lack);
                 }
             }
-            require(IERC20(asset()).balanceOf(address(this)) >= assets, "IBA");
+            // Allow up to 1% slippage tolerance in the final balance check
+            uint256 currentBalance = IERC20(asset()).balanceOf(address(this));
+            uint256 minimumAcceptable = (assets * 99) / 100;  // 99% of requested amount
+            require(currentBalance >= minimumAcceptable, "IBA");
+            
+            // Adjust assets to actual amount received if less than requested
+            if (currentBalance < assets) {
+                assets = currentBalance;
+            }
         }
 
         uint256 fee = 0;
         uint256 principal = assets;
         
-        if (max > deposits[caller].amount && max > 0) {
-            uint256 depositAmount = deposits[caller].amount;
+        if (max > deposits[owner].amount && max > 0) {
+            uint256 depositAmount = deposits[owner].amount;
             require(max >= depositAmount, "IWC");
             
             uint256 profitMultiplier = max - depositAmount;
@@ -220,12 +237,12 @@ abstract contract ERC4626FeesUpgradeable is ERC4626Upgradeable {
             SafeERC20.safeTransfer(IERC20(asset()), recipient, fee);
         }
 
-        if (principal <= deposits[caller].amount) {
-            deposits[caller].amount = deposits[caller].amount - principal;
+        if (principal <= deposits[owner].amount) {
+            deposits[owner].amount = deposits[owner].amount - principal;
         } else {
-            deposits[caller].amount = 0;
+            deposits[owner].amount = 0;
         }
-        deposits[caller].timestamp = block.timestamp;
+        deposits[owner].timestamp = block.timestamp;
     }
 
 
@@ -298,9 +315,7 @@ assets.mulDiv(feeBasisPoints, _BASIS_POINT_SCALE, Math.Rounding.Ceil);
     function swap(uint256 index, uint256 amountIn, uint256 numWrap) public returns (int256[] memory) {
         return swapContract.swap(tokensInfo[index], vault, amountIn, numWrap);
     }
-    function estimateSwap(uint256 index, uint256 amountOut) public returns (uint256) {
-        return swapContract.estimateSwap(tokensInfo[index], vault, amountOut);
-    }
+    
 
 
     function setMaxDeposit(uint256 newValue) public virtual {
@@ -350,6 +365,7 @@ assets.mulDiv(feeBasisPoints, _BASIS_POINT_SCALE, Math.Rounding.Ceil);
             distributions[i] = (totalAmount * weights[i]) / tw;
             allocatedAmount += distributions[i];
         }
+        // Calculate the last distribution to avoid rounding errors
         distributions[3] = totalAmount - allocatedAmount;
     }
 
@@ -395,6 +411,15 @@ assets.mulDiv(feeBasisPoints, _BASIS_POINT_SCALE, Math.Rounding.Ceil);
                         "SVF"
                     );
                     
+                    // Wrap LST to Wrapped LST immediately after staking (except stKAIA)
+                    if (i < 3) {  // KoKAIA, GCKAIA, stKLAY need wrapping
+                        uint256 lstReceived = balanceAfter - balanceBefore;
+                        if (lstReceived > 0) {
+                            _wrapLST(i, lstReceived);
+                        }
+                    }
+                    // stKAIA (i == 3) doesn't need wrapping as it doesn't have wrapped version
+                    
                     totalDistributed += distributions[i];
                     emit StakingSuccess(i, distributions[i]);
                 }
@@ -402,6 +427,41 @@ assets.mulDiv(feeBasisPoints, _BASIS_POINT_SCALE, Math.Rounding.Ceil);
         }
         
         require(totalDistributed > 0, "NSO");
+    }
+
+    function _wrapLST(uint256 protocolIndex, uint256 amount) internal {
+        require(protocolIndex < 3, "Invalid protocol index for wrapping");
+        require(amount > 0, "Amount must be greater than 0");
+        
+        address lstToken = tokensInfo[protocolIndex].asset;
+        address wrappedToken = tokensInfo[protocolIndex].tokenA;
+        
+        // Check current allowance and only approve if needed
+        uint256 currentAllowance = IERC20(lstToken).allowance(address(this), wrappedToken);
+        if (currentAllowance < amount) {
+            // Reset to 0 first, then approve exact amount needed
+            IERC20(lstToken).approve(wrappedToken, 0);
+            IERC20(lstToken).approve(wrappedToken, amount);
+        }
+        
+        // Get wrapped balance before
+        uint256 wrappedBalanceBefore = IWrapped(wrappedToken).balanceOf(address(this));
+        
+        // Wrap the LST
+        try IWrapped(wrappedToken).wrap(amount) {
+            // Verify wrapping was successful
+            uint256 wrappedBalanceAfter = IWrapped(wrappedToken).balanceOf(address(this));
+            uint256 wrappedReceived = wrappedBalanceAfter - wrappedBalanceBefore;
+            require(wrappedReceived > 0, "Wrapping failed - no wrapped tokens received");
+            
+            emit LSTWrapped(protocolIndex, amount, wrappedReceived);
+        } catch Error(string memory reason) {
+            emit LSTWrapFailed(protocolIndex, amount, reason);
+            // Even if wrapping fails, we continue as we still have the LST
+        } catch {
+            emit LSTWrapFailed(protocolIndex, amount, "Unknown wrapping error");
+            // Even if wrapping fails, we continue as we still have the LST
+        }
     }
 
     struct AssetBalance {
@@ -552,6 +612,11 @@ assets.mulDiv(feeBasisPoints, _BASIS_POINT_SCALE, Math.Rounding.Ceil);
         }
     }
 
+    function estimateSwap(uint256 index, uint256 amountOut) internal returns (int256[] memory) {
+        // Call SwapContract's estimateSwapGivenOut function
+        return swapContract.estimateSwapGivenOut(tokensInfo[index], vault, amountOut);
+    }
+    
     function execWithdraw(uint256 amt) internal {
         WithdrawPlan memory plan = planWithdraw(amt);
 
@@ -580,7 +645,7 @@ assets.mulDiv(feeBasisPoints, _BASIS_POINT_SCALE, Math.Rounding.Ceil);
         if (balances[index].totalValue == 0) return;
 
         if (index == 3) {
-            // stKAIA unstaking logic
+            // stKAIA unstaking logic (no wrapped version)
             uint256 targetAmount = (amt * 110) / 100; // 10% buffer for stKAIA
             uint256 needed;
             unchecked {
@@ -589,62 +654,52 @@ assets.mulDiv(feeBasisPoints, _BASIS_POINT_SCALE, Math.Rounding.Ceil);
             }
 
             if (needed > 0) {
-                IERC20(tokensInfo[index].asset).approve(tokensInfo[index].handler, 0);
-                IERC20(tokensInfo[index].asset).approve(tokensInfo[index].handler, needed);
+                SafeERC20.forceApprove(IERC20(tokensInfo[index].asset), tokensInfo[index].handler, needed);
                 IStKaia(tokensInfo[index].handler).unstake(BugHole, address(this), needed);
 
                 uint256 kaia = address(this).balance;
                 if (kaia > 0) IWKaia(asset()).deposit{value: kaia}();
             }
         } else {
-            uint256 requiredWrapped;
-            try this.estimateSwap(index, amt) returns (uint256 estimated) {
-                requiredWrapped = (estimated * 105) / 100;
-            } catch {
-                requiredWrapped = (amt * 120) / 100;
-            }
+            // For KoKAIA, GCKAIA, stKLAY - we already have wrapped tokens
+            // Use estimateSwap to verify GIVEN_OUT swap is possible
             
-            // Step 2: 현재 wrapped balance 확인
-            uint256 currentWrapped = balances[index].wrapBal;
-            uint256 assetToWrap = 0;
+            uint256 availableWrapped = balances[index].wrapBal;
             
-            if (requiredWrapped > currentWrapped) {
-                uint256 needToWrap = requiredWrapped - currentWrapped;
+            if (availableWrapped > 0) {
+                // Add 3% buffer for slippage
+                uint256 amountWithBuffer = (amt * 103) / 100;
                 
-                // Step 3: getUnwrappedAmount로 필요한 asset 양 계산
-                if (index == 0 || index == 2) {
-                    try IWrapped(tokensInfo[index].tokenA).getUnwrappedAmount(needToWrap) returns (uint256 unwrapped) {
-                        assetToWrap = unwrapped;
-                    } catch { assetToWrap = (needToWrap * 101) / 100; }
-                } else {
-                    try IWrapped(tokensInfo[index].tokenA).getGCKLAYByWGCKLAY(needToWrap) returns (uint256 gck) {
-                        assetToWrap = gck;
-                    } catch { assetToWrap = (needToWrap * 101) / 100; }
+                // Make sure we don't request more than theoretically possible
+                if (amountWithBuffer > balances[index].totalValue) {
+                    amountWithBuffer = balances[index].totalValue;
                 }
                 
-                // Step 4: Asset 잔액으로 제한하고 wrap 실행
-                if (assetToWrap > balances[index].balance) {
-                    assetToWrap = balances[index].balance;
-                }
+                // First estimate the swap to check if we have enough wrapped tokens
+                int256[] memory estimatedDeltas = estimateSwap(index, amountWithBuffer);
                 
-                if (assetToWrap > 0) {
-                    IERC20(tokensInfo[index].asset).approve(tokensInfo[index].tokenA, 0);
-                    IERC20(tokensInfo[index].asset).approve(tokensInfo[index].tokenA, assetToWrap);
+                // Check if the required input amount exceeds our available wrapped balance
+                // estimatedDeltas[0] is negative (amount in), so we need to convert to positive
+                uint256 requiredInput = estimatedDeltas[0] < 0 ? uint256(-estimatedDeltas[0]) : uint256(estimatedDeltas[0]);
+                
+                // If we don't have enough wrapped tokens, adjust the output amount
+                uint256 actualAmountOut = amountWithBuffer;
+                if (requiredInput > availableWrapped) {
+                    // Calculate the maximum output we can get with available wrapped tokens
+                    // Proportionally reduce the output amount
+                    actualAmountOut = (amountWithBuffer * availableWrapped) / requiredInput;
                     
-                    uint256 balanceBefore = IWrapped(tokensInfo[index].tokenA).balanceOf(address(this));
-                    IWrapped(tokensInfo[index].tokenA).wrap(assetToWrap);
-                    uint256 balanceAfter = IWrapped(tokensInfo[index].tokenA).balanceOf(address(this));
-                    require(balanceAfter > balanceBefore, "Wrap failed");
+                    // Make sure we at least try to get the minimum required amount
+                    if (actualAmountOut < amt) {
+                        actualAmountOut = amt;  // Try with original amount without buffer
+                    }
                 }
-            }
-            
-            // Step 5: 실제 swap 실행
-            uint256 finalWrapped = IWrapped(tokensInfo[index].tokenA).balanceOf(address(this));
-            if (finalWrapped > 0) {
-                // SwapContract로 wrapped token 전송
-                IERC20(tokensInfo[index].tokenA).transfer(address(swapContract), finalWrapped);
                 
-                int256[] memory deltas = swap(index, finalWrapped, 0); // numWrap=0 since we already wrapped
+                // Transfer wrapped tokens to SwapContract
+                SafeERC20.safeTransfer(IERC20(tokensInfo[index].tokenA), address(swapContract), availableWrapped);
+                
+                // Execute GIVEN_OUT swap with adjusted amount
+                int256[] memory deltas = swapContract.swapGivenOut(tokensInfo[index], vault, actualAmountOut, availableWrapped);
                 emit BatchSwap(deltas[0], deltas[1], deltas[2]);
                 
                 // Safe absolute value conversion using SafeCast
@@ -754,6 +809,13 @@ contract KVaultV2 is ERC4626FeesUpgradeable, OwnableUpgradeable, ReentrancyGuard
         }
     }
 
+    function getAllAPY() public view returns (uint256[4] memory) {
+        uint256[4] memory apys;
+        for (uint256 i = 0; i < 4; i++) {
+            apys[i] = lstAPY[i] / 10;
+        }
+        return apys;
+    }
 
     function addOperator(address addr) public onlyOwner {
         operators[addr] = true;

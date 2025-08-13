@@ -6,18 +6,24 @@ ERC-4626 Tokenized Vault with APY-based multi-asset staking and smart swap funct
 
 **Current Version**: Production-ready with extensive testing  
 **Network**: Kairos Testnet (Active) | Kaia Mainnet (Ready)  
-**Last Updated**: August 2025  
+**Last Updated**: August 13, 2025  
 
 ### ✅ Recent Improvements
 - **Multi-GC Investment**: Distributed investment across multiple Governance Council tokens
 - **Enhanced Swap Logic**: Improved multi-LST swap functionality with better error handling  
 - **Slippage Protection**: Comprehensive slippage value integration across all swap operations
 - **Wrap/Unwrap Calibration**: Precise amount calibration before and after wrap/unwrap operations
+- **Automatic LST Wrapping**: LST tokens are automatically wrapped after staking (except stKAIA)
 - **Robust Testing Suite**: 50+ test scripts covering edge cases and real-world scenarios
+
+### 📝 Known Issues
+- **State Accumulation**: After multiple deposits and APY changes, "WETH: request exceeds allowance" may occur
+  - Workaround: Fresh deployment resolves the issue
+  - All tests pass on clean deployments
 
 ## 🏗️ Architecture
 
-- **KVaultV2** (22.8 KiB): Main ERC4626 vault with APY-based multi-asset staking
+- **KVaultV2** (23.7 KiB with optimizer runs=200): Main ERC4626 vault with APY-based multi-asset staking
   - 📈 Dynamic APY management for 4 LST protocols
   - 🔄 Intelligent asset allocation based on yield optimization  
   - 🔁 Multi-asset withdrawal with priority-based selection
@@ -155,13 +161,13 @@ console.log(`KoKAIA: ${kokaiaAPY/100}%`); // 6.25%
 
 ### Kairos Testnet (Active)
 ```bash
-# Current Deployed Contracts
-KVaultV2:     0x7e5091727d799F6D30F60cb7373B4F56bcfa746b
-SwapContract: 0xe6DeC70339D50EDB68165920ca3E535bD795a056
+# Current Deployed Contracts (Latest)
+KVaultV2:     0x5a654804B7dE1933f07d961EAb387A2A46FA8174
+SwapContract: 0x2Fd6477ED442196C64df2f11d128fd5aAf18Ce59
 
-# Deployment Date: August 12, 2025
-# Recent Upgrades: 11 KVaultV2 upgrades, 5 SwapContract upgrades
-# Status: Production-ready with extensive testing
+# Deployment Date: August 13, 2025
+# Status: Fresh deployment with optimizer runs=200
+# RPC: QuickNode (https://responsive-green-emerald.kaia-kairos.quiknode.pro)
 ```
 
 ### Kaia Mainnet (Ready for Production)
@@ -196,42 +202,26 @@ WKAIA: 0x0339d5Eb6D195Ba90B13ed1BCeAa97EbD198b106
 
 프로젝트에는 체계적으로 정리된 통합 테스트 시스템이 포함되어 있습니다:
 
-### 🎯 메인 테스트 스위트 (권장)
+### 🎯 메인 테스트 스위트
 ```bash
-# 통합 테스트 실행 (모든 테스트 포함)
-npx hardhat run scripts/runAllTests.js --network kairos
+# 통합 테스트 실행 (권장)
+yarn test:integration      # 종합 통합 테스트
 
-# 개별 테스트 스위트
-npx hardhat run scripts/testSuite.js --network kairos           # 기본 기능 테스트
-npx hardhat run scripts/advancedTestSuite.js --network kairos   # 고급 시나리오 테스트
-npx hardhat run scripts/edgeCaseTestSuite.js --network kairos   # Edge case 테스트
-npx hardhat run scripts/performanceTestSuite.js --network kairos # 성능 벤치마크
+# 개별 기능 테스트
+yarn test-apy:dev          # APY 시스템 테스트
+yarn reset-apy:dev         # APY 초기화
 ```
 
-### 🔄 Balancer Pool & Swap 전용 테스트
-```bash
-# Balancer 풀 상태 확인
-npx hardhat run scripts/balancer-tests/checkBalancerPools.js --network kairos
-
-# 다중 LST swap 테스트
-npx hardhat run scripts/balancer-tests/testMultiLSTSwap.js --network kairos
-
-# Swap 오류 분석
-npx hardhat run scripts/balancer-tests/analyzeSwapError.js --network kairos
-
-# 개별 LST swap 테스트
-npx hardhat run scripts/balancer-tests/testSingleLSTSwap.js --network kairos
-```
 
 ### 🏗️ 시스템 관리 도구
 ```bash
+# 통합 테스트
+yarn test:integration      # 통합 테스트 (Testnet)
+yarn test:integration:prod # 통합 테스트 (Mainnet)
+
 # APY 시스템 테스트
 yarn test-apy:dev          # APY 기능 및 분배 테스트
 yarn reset-apy:dev         # 테스트용 APY 값 초기화
-
-# 컨트랙트 상태 확인
-npx hardhat run scripts/checkVaultState.js --network kairos     # Vault 전체 상태
-npx hardhat run scripts/checkVaultBalance.js --network kairos   # Vault 잔액 확인
 
 # 계약 검증
 yarn sizetest              # 컨트랙트 크기 제한 검증
@@ -251,7 +241,6 @@ yarn test                  # Hardhat 기본 테스트 실행
 ### 📚 상세 테스트 가이드
 - **[TEST_GUIDE.md](./TEST_GUIDE.md)**: 전체 테스트 가이드
 - **[scripts/README.md](./scripts/README.md)**: 스크립트 구조 및 사용법  
-- **[scripts/balancer-tests/README.md](./scripts/balancer-tests/README.md)**: Balancer 전용 테스트
 
 ## 🎯 프로덕션 준비도
 

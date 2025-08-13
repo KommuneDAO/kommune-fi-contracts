@@ -124,6 +124,16 @@ contract SwapContract is Initializable, OwnableUpgradeable {
         address vault,
         uint256 amountOut
     ) external returns (uint256) {
+        int256[] memory deltas = estimateSwapGivenOut(token, vault, amountOut);
+        // Return the absolute value of tokenA delta (the input amount needed)
+        return uint256(deltas[0] >= 0 ? deltas[0] : -deltas[0]);
+    }
+    
+    function estimateSwapGivenOut(
+        TokenInfo memory token,
+        address vault,
+        uint256 amountOut
+    ) public returns (int256[] memory) {
         // Create assets array and sort by address
         address[] memory tokenAddresses = new address[](3);
         tokenAddresses[0] = token.tokenA;
@@ -159,20 +169,21 @@ contract SwapContract is Initializable, OwnableUpgradeable {
 
         IBalancerVault.BatchSwapStep[] memory steps = new IBalancerVault.BatchSwapStep[](2);
         // For GIVEN_OUT, we specify the exact output and work backwards
-        // The steps are still in forward order, but with the output amount specified
+        // Step 1: Pool2 (tokenB → WKAIA) with exact output
         steps[0] = IBalancerVault.BatchSwapStep({
             poolId: token.pool2,
-            assetInIndex: tokenBIndex,  // Input tokenB
-            assetOutIndex: tokenCIndex,  // Output tokenC
-            amount: amountOut,  // Exact amount of tokenC we want out
+            assetInIndex: tokenBIndex,  
+            assetOutIndex: tokenCIndex,  
+            amount: amountOut,  // Exact WKAIA wanted
             userData: ""
         });
 
+        // Step 2: Pool1 (wrapped LST → tokenB) calculated by Balancer
         steps[1] = IBalancerVault.BatchSwapStep({
             poolId: token.pool1,
-            assetInIndex: tokenAIndex,  // Input tokenA
-            assetOutIndex: tokenBIndex,  // Output tokenB
-            amount: 0,  // Will be calculated to produce enough tokenB for step 0
+            assetInIndex: tokenAIndex,  
+            assetOutIndex: tokenBIndex,  
+            amount: 0,  // Calculated by Balancer
             userData: ""
         });
 
@@ -195,7 +206,96 @@ contract SwapContract is Initializable, OwnableUpgradeable {
             funds
         );
         
-        require(deltas[tokenAIndex] != type(int256).min, "");
-        return uint256(deltas[tokenAIndex] >= 0 ? deltas[tokenAIndex] : -deltas[tokenAIndex]);
+        require(deltas[tokenAIndex] != type(int256).min, "Invalid swap");
+        return deltas;
+    }
+
+    function swapGivenOut(
+        TokenInfo memory token,
+        address vault,
+        uint256 amountOut,  // Desired WKAIA amount
+        uint256 maxAmountIn  // Maximum wrapped LST to use
+    ) external returns (int256[] memory) {
+        // Approve wrapped token for Balancer vault
+        if (maxAmountIn > 0) {
+            IERC20(token.tokenA).approve(vault, 0);
+            IERC20(token.tokenA).approve(vault, maxAmountIn);
+        }
+
+        // Create assets array and sort by address
+        address[] memory tokenAddresses = new address[](3);
+        tokenAddresses[0] = token.tokenA;  // Wrapped LST
+        tokenAddresses[1] = token.tokenB;  // Intermediate token
+        tokenAddresses[2] = token.tokenC;  // WKAIA
+        
+        // Simple bubble sort for 3 elements
+        for (uint i = 0; i < 2; i++) {
+            for (uint j = 0; j < 2 - i; j++) {
+                if (tokenAddresses[j] > tokenAddresses[j + 1]) {
+                    address temp = tokenAddresses[j];
+                    tokenAddresses[j] = tokenAddresses[j + 1];
+                    tokenAddresses[j + 1] = temp;
+                }
+            }
+        }
+        
+        IAsset[] memory assets = new IAsset[](3);
+        assets[0] = IAsset(tokenAddresses[0]);
+        assets[1] = IAsset(tokenAddresses[1]);
+        assets[2] = IAsset(tokenAddresses[2]);
+        
+        // Find correct indices after sorting
+        uint256 tokenAIndex;
+        uint256 tokenBIndex;
+        uint256 tokenCIndex;
+        
+        for (uint i = 0; i < 3; i++) {
+            if (tokenAddresses[i] == token.tokenA) tokenAIndex = i;
+            else if (tokenAddresses[i] == token.tokenB) tokenBIndex = i;
+            else if (tokenAddresses[i] == token.tokenC) tokenCIndex = i;
+        }
+
+        // For GIVEN_OUT, swap steps are in reverse order!
+        IBalancerVault.BatchSwapStep[] memory steps = new IBalancerVault.BatchSwapStep[](2);
+        
+        // Step 1: Pool2 (tokenB → tokenC/WKAIA) with exact output amount
+        steps[0] = IBalancerVault.BatchSwapStep({
+            poolId: token.pool2,
+            assetInIndex: tokenBIndex,  // Intermediate token in
+            assetOutIndex: tokenCIndex,  // WKAIA out
+            amount: amountOut,  // Exact WKAIA amount we want
+            userData: ""
+        });
+
+        // Step 2: Pool1 (tokenA/wrapped LST → tokenB) amount calculated by Balancer
+        steps[1] = IBalancerVault.BatchSwapStep({
+            poolId: token.pool1,
+            assetInIndex: tokenAIndex,  // Wrapped LST in
+            assetOutIndex: tokenBIndex,  // Intermediate token out
+            amount: 0,  // Will be calculated by Balancer
+            userData: ""
+        });
+
+        // Set limits for GIVEN_OUT swap
+        int256[] memory limits = new int256[](3);
+        limits[tokenAIndex] = maxAmountIn <= uint256(type(int256).max) ? int256(maxAmountIn) : type(int256).max; // Max wrapped LST to use
+        limits[tokenBIndex] = 0;  // No limit for intermediate token
+        limits[tokenCIndex] = amountOut <= uint256(type(int256).max) ? -int256(amountOut) : type(int256).min; // Min WKAIA to receive (negative)
+
+        IBalancerVault.FundManagement memory funds = IBalancerVault.FundManagement({
+            sender: address(this),        // SwapContract holds the tokens
+            fromInternalBalance: false,
+            recipient: msg.sender,        // Send output to KVaultV2
+            toInternalBalance: false
+        });
+
+        return IBalancerVault(vault).batchSwap(
+            IBalancerVault.SwapKind.GIVEN_OUT,  // GIVEN_OUT = 1
+            steps,
+            assets,
+            funds,
+            limits,
+            block.timestamp + 600
+        );
     }
 }
