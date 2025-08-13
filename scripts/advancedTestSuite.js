@@ -97,7 +97,9 @@ async function advancedTestSuite() {
     try {
       // 테스트용 예치
       const depositAmount = ethers.parseEther("3.0");
-      await wkaia.approve(vaultAddress, depositAmount);
+      // 충분한 allowance 설정 (기존 allowance 초기화 후 새로 설정)
+      await wkaia.approve(vaultAddress, 0);
+      await wkaia.approve(vaultAddress, ethers.parseEther("10.0"));
       const depositTx = await vault.deposit(depositAmount, signer.address);
       const receipt = await depositTx.wait();
       
