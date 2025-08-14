@@ -11,14 +11,24 @@ module.exports = {
   solidity: {
     compilers: [
       {
-        version: "0.8.26",
+        version: "0.8.22",
         settings: {
-          evmVersion: "cancun",
+          evmVersion: "paris",
           viaIR: true,
           optimizer: {
             enabled: true,
             runs: 1,
+            details: {
+              yul: true,
+              yulDetails: {
+                stackAllocation: true,
+                optimizerSteps: "dhfoDgvulfnTUtnIf"
+              }
+            }
           },
+          metadata: {
+            bytecodeHash: "none"
+          }
         },
       },
       {

@@ -1,263 +1,236 @@
-# Kommune-Fi AI Agent Smart Contracts
+# KommuneFi Contracts - ERC20 Version
 
-ERC-4626 Tokenized Vault with APY-based multi-asset staking and smart swap functionality
+## Overview
+KommuneFi is a liquid staking protocol on Kaia blockchain that allows users to deposit KAIA and receive kvKAIA tokens representing their staked position. The protocol automatically distributes staked KAIA across multiple Liquid Staking Token (LST) protocols based on configured APY rates.
 
-## 🚀 Project Status
+## Architecture
 
-**Current Version**: Production-ready with extensive testing  
-**Network**: Kairos Testnet (Active) | Kaia Mainnet (Ready)  
-**Last Updated**: August 13, 2025  
+### Separated Vault Architecture (V2)
+The protocol uses a separated architecture to overcome contract size limitations:
 
-### ✅ Recent Improvements
-- **Multi-GC Investment**: Distributed investment across multiple Governance Council tokens
-- **Enhanced Swap Logic**: Improved multi-LST swap functionality with better error handling  
-- **Slippage Protection**: Comprehensive slippage value integration across all swap operations
-- **Wrap/Unwrap Calibration**: Precise amount calibration before and after wrap/unwrap operations
-- **Automatic LST Wrapping**: LST tokens are automatically wrapped after staking (except stKAIA)
-- **Robust Testing Suite**: 50+ test scripts covering edge cases and real-world scenarios
+- **ShareVault** (12.23 KB): ERC-4626 compliant contract managing shares (kvKAIA tokens)
+- **VaultCore** (10.17 KB): Core logic for LST management and asset handling
+- **SwapContract** (9.26 KB): Handles Balancer pool swaps for withdrawals (**FINALIZED - DO NOT MODIFY**)
 
-### 📝 Known Issues
-- **State Accumulation**: After multiple deposits and APY changes, "WETH: request exceeds allowance" may occur
-  - Workaround: Fresh deployment resolves the issue
-  - All tests pass on clean deployments
+### Previous Architecture (V1)
+- **KommuneVault**: Original single contract implementation
+- **KVaultV2**: Optimized version with helper contracts (reached size limit)
 
-## 🏗️ Architecture
+### Supported LST Protocols
+1. **wKoKAIA** (Index 0): Wrapped KoKaia protocol tokens
+2. **wGCKAIA** (Index 1): Wrapped GcKaia protocol tokens  
+3. **wstKLAY** (Index 2): Wrapped stKLAY protocol tokens
+4. **stKAIA** (Index 3): Native stKAIA tokens
 
-- **KVaultV2** (23.7 KiB with optimizer runs=200): Main ERC4626 vault with APY-based multi-asset staking
-  - 📈 Dynamic APY management for 4 LST protocols
-  - 🔄 Intelligent asset allocation based on yield optimization  
-  - 🔁 Multi-asset withdrawal with priority-based selection
-  - 🛜 Upgradeable architecture for continuous improvements
-  - 💎 Multiple GC token support with distributed investment
-- **SwapContract** (4.2 KiB): Upgradeable Balancer DEX integration
-  - 🔄 Cross-protocol token swapping with enhanced error handling
-  - 📊 Slippage-protected transactions with configurable tolerance
-  - 🔍 Swap estimation and routing optimization
-  - 🎯 Multi-LST swap support for complex operations
+## Deployment
 
-## 🚀 Quick Start
-
+### Prerequisites
 ```bash
-# Install dependencies
-yarn install
-
-# Compile contracts
-yarn compile
-
-# Check contract sizes
-yarn sizetest
-
-# Deploy to testnet (Kairos)
-yarn deploy-all:dev
-
-# Deploy to mainnet (Kaia)
-yarn deploy-all:prod
+npm install
+cp .env.example .env
+# Configure your private key in .env
 ```
 
-## 📦 Available Commands
-
-### Deployment
+### Deploy Separated Vault Architecture (V2)
 ```bash
-# Full deployment (recommended)
-yarn deploy-all:dev      # Testnet
-yarn deploy-all:prod     # Mainnet
+# Deploy ShareVault and VaultCore (Kairos testnet)
+npx hardhat run scripts/deploySeparatedVault.js --network kairos
+# Creates: deployments-kairos.json
 
-# Individual deployment
-yarn deploy-swap:dev     # SwapContract only
-yarn deploy-vault:dev    # KVaultV2 only
+# Deploy to mainnet
+npx hardhat run scripts/deploySeparatedVault.js --network kaia
+# Creates: deployments-kaia.json
+
+# Configure APY and parameters
+npx hardhat run scripts/setupSeparatedVault.js --network kairos
 ```
 
-### Upgrades
+### Upgrade Existing Deployment
 ```bash
-yarn upgrade-swap:dev    # Upgrade SwapContract
-yarn upgrade-vault:dev   # Upgrade KVaultV2
+npx hardhat run scripts/upgradeSeparatedVault.js --network kairos
 ```
 
-### APY Management
+### Deploy V1 (Legacy)
 ```bash
-yarn test-apy:dev        # Test APY functions (Testnet)
-yarn test-apy:prod       # Test APY functions (Mainnet)
+# V1 deployment (KommuneVault)
+npx hardhat run scripts/deploy.js --network kairos
+npx hardhat run scripts/upgrade.js --network kairos
 ```
 
-### Legacy (Deprecated)
+## Current Deployment (Kairos Testnet)
+
+### Separated Architecture (V2) - Latest
+| Contract | Address | Size |
+|----------|---------|------|
+| ShareVault | 0xfd2853D33733fC841248838525824fC7828441cb | 12.23 KB |
+| VaultCore | 0x42Ec587DEb0EDe5296b507591EbB84140D2280F2 | 10.17 KB |
+| SwapContract | 0x829718DBf5e19AB36ab305ac7A7c6C9995bB5F15 | 9.26 KB |
+
+### Previous Deployments
+- **KVaultV2**: 0xfBF698074Cc9D6496c22faa117616E2038551424 (23.99 KB - at size limit)
+
+## Configuration
+
+### APY Settings
+Default APY configuration (set via `setupSeparatedVault.js`):
+- wKoKAIA: 5%
+- wGCKAIA: 6%
+- wstKLAY: 7%
+- stKAIA: 8%
+
+### Vault Parameters
+- **Invest Ratio**: 90% (90% staked, 10% kept liquid)
+- **Deposit Limit**: 100 WKAIA per user
+- **Fees**: 0.1% (10 basis points)
+- **Slippage**: 10% tolerance for testnet
+
+## Testing
+
+### Test Results Summary
+All core features have been thoroughly tested and verified:
+
+#### ✅ Completed Tests:
+1. **Basic Deposits**
+   - WKAIA deposits with share minting
+   - Native KAIA deposits with automatic wrapping
+   - APY-based distribution to all 4 LSTs
+   - Automatic wrapping for wKoKAIA, wGCKAIA, wstKLAY
+
+2. **Multi-Wallet Deposits** 
+   - 3 wallets × 10 rounds × 2 types = 60/60 successful deposits
+   - No concurrency issues between different wallets
+   - Proper share distribution per wallet
+
+3. **APY Dynamic Changes**
+   - APY updates during operation work correctly
+   - Immediate redistribution based on new APY values
+   - Multiple APY changes handled smoothly
+
+4. **Per-Block Security Limits**
+   - Same wallet cannot deposit twice in same block ✅
+   - Different wallets can deposit in same block ✅
+   - Protection works for both WKAIA and native KAIA ✅
+
+5. **LST Integration**
+   - All 4 LSTs receive correct stake amounts
+   - Proper use of `stake()` function instead of `deposit()`
+   - Balance verification before operations
+
+### Run Integration Tests
 ```bash
-yarn deploy:dev          # Old KommuneVault
-yarn upgrade:dev         # Old upgrade script
+# Full integration test (comprehensive)
+npx hardhat run scripts/tests/fullIntegrationTest.js --network kairos
+
+# Individual feature tests
+npx hardhat run scripts/tests/testMultiWalletDeposits.js --network kairos
+npx hardhat run scripts/tests/testAPYChangeSimple.js --network kairos
+npx hardhat run scripts/tests/testPerBlockLimit.js --network kairos
+npx hardhat run scripts/tests/testNativeKAIADeposit.js --network kairos
 ```
 
-## 📈 APY Management System
+## Key Features
 
-KVaultV2 implements a sophisticated APY-based asset allocation system across 4 LST protocols:
+### For Users
+- **Deposit**: Native KAIA or WKAIA deposits
+- **Withdraw**: Receive WKAIA by burning shares
+- **Auto-distribution**: Deposits automatically distributed to highest APY protocols
+- **ERC-4626 Compliant**: Standard vault interface
 
-### 🎨 Supported Protocols
-- **Index 0**: KoKAIA (KommuneDAO) - Liquid Staking Token
-- **Index 1**: GCKAIA (Swapscanner) - Governance Council Staking
-- **Index 2**: stKLAY (Kracker Labs) - Klaytn Staking
-- **Index 3**: stKAIA (Lair Finance) - Kaia Staking
+### Technical Features
+- **UUPS Upgradeable**: Both contracts support upgrades
+- **Separated Architecture**: Overcomes 24KB contract size limit
+- **GIVEN_OUT Swaps**: Exact WKAIA output amounts for precise withdrawals
+- **Gas Optimized**: Minimal storage operations
+- **Multi-LST Support**: Automatic distribution across 4 LST protocols
 
-### ⚙️ APY Functions
+## Scripts Directory Structure
 
-```solidity
-// Set individual APY (only operators)
-setAPY(uint256 index, uint256 apy)        // 5.25% = 525
-
-// Set multiple APYs at once
-setMultipleAPY(uint256[4] apyValues)       // [500, 475, 525, 450]
-
-// Query APY values
-getAPY(uint256 index)                     // Returns: 525 (for 5.25%)
-getAllAPY()                               // Returns: [500, 475, 525, 450]
-getAPYInBasisPoints(uint256 index)        // Returns: 5250 (internal format)
+```
+scripts/
+├── deploy.js                    # V1 deployment (DO NOT MODIFY)
+├── upgrade.js                   # V1 upgrade (DO NOT MODIFY)
+├── deploySeparatedVault.js     # Deploy ShareVault + VaultCore
+├── upgradeSeparatedVault.js    # Upgrade separated vault
+├── setupSeparatedVault.js      # Configure vault parameters
+├── testSeparatedVault.js       # Integration tests
+├── deploySwapContract.js       # Deploy SwapContract
+├── setAPY.js                    # Set APY values
+└── tests/                       # All test and debug scripts
+    ├── testSwapContractDirect.js  # Direct SwapContract testing
+    └── old/                     # Deprecated scripts
 ```
 
-### 📀 APY Format
-- **Input**: Percentage with 2 decimal places (5.25% = 525)
-- **Storage**: Basis points (525 × 10 = 5250 for internal calculations)
-- **Range**: 0.00% to 100.00% (0 to 10000)
+## APY Management
 
-### 🔄 Investment Logic
-1. **Asset Allocation**: Higher APY protocols receive more investment
-2. **Withdrawal Priority**: Lower APY protocols are withdrawn first
-3. **Automatic Rebalancing**: Based on real-time APY values
-
-### 🎆 Events
-```solidity
-event APYUpdated(uint256 indexed index, uint256 oldAPY, uint256 newAPY);
-```
-
-### 📊 Usage Examples
-
+### Set APY Values
 ```javascript
-// Connect to deployed contract
-const vault = await ethers.getContractAt("KVaultV2", vaultAddress);
+// Using setAPY.js script
+npx hardhat run scripts/setAPY.js --network kairos
 
-// Set APY for KoKAIA to 5.75%
-await vault.setAPY(0, 575);
-
-// Set all APYs at once
-await vault.setMultipleAPY([625, 550, 475, 500]); // 6.25%, 5.50%, 4.75%, 5.00%
-
-// Check current APY values
-const apys = await vault.getAllAPY();
-console.log(`KoKAIA APY: ${apys[0]/100}%`); // 6.25%
-
-// Check individual APY
-const kokaiaAPY = await vault.getAPY(0);
-console.log(`KoKAIA: ${kokaiaAPY/100}%`); // 6.25%
+// Or programmatically
+const vaultCore = await ethers.getContractAt("VaultCore", vaultCoreAddress);
+await vaultCore.setAPY(0, 5000); // 5% for wKoKAIA
+await vaultCore.setAPY(1, 6000); // 6% for wGCKAIA
 ```
 
-### 🔑 Access Control
-- **APY Updates**: Only `operators` can modify APY values
-- **Owner Functions**: Add/remove operators
-- **Public Queries**: Anyone can read APY values
+### APY Format
+- Input: Basis points × 10 (5% = 5000)
+- Range: 0 to 10000 (0% to 100%)
 
-## 📋 상세 가이드
+## Contract Addresses (Kairos Testnet)
 
-- **[DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md)**: 컨트랙트 배포 상세 가이드
-- **[TEST_GUIDE.md](./TEST_GUIDE.md)**: 종합 테스트 실행 가이드
-- **[scripts/README.md](./scripts/README.md)**: 스크립트 구조 및 사용법
-
-## 🌐 Network Configuration
-
-### Kairos Testnet (Active)
-```bash
-# Current Deployed Contracts (Latest)
-KVaultV2:     0x5a654804B7dE1933f07d961EAb387A2A46FA8174
-SwapContract: 0x2Fd6477ED442196C64df2f11d128fd5aAf18Ce59
-
-# Deployment Date: August 13, 2025
-# Status: Fresh deployment with optimizer runs=200
-# RPC: QuickNode (https://responsive-green-emerald.kaia-kairos.quiknode.pro)
+### Core Infrastructure
 ```
-
-### Kaia Mainnet (Ready for Production)
-```bash
-# Contract addresses will be stored in deployments-kaia.json  
-# Deploy using: yarn deploy-all:prod
-# Status: Ready for mainnet deployment
-```
-
-### Deployment History & Upgrades
-
-The contracts have undergone extensive testing and multiple upgrades:
-
-- **KVaultV2**: 11 successful upgrades addressing edge cases and optimizations
-- **SwapContract**: 5 upgrades improving swap logic and error handling
-- **Latest Updates**: August 12, 2025 - Multi-GC support and enhanced testing
-
-### Protocol Addresses (Testnet)
-```solidity
-// LST Protocols
-KoKAIA:  0xb15782EFbC2034E366670599F3997f94c7333FF9
-GCKAIA:  0x4EC04F4D46D7e34EBf0C3932B65068168FDcE7f6
-stKLAY:  0x524dCFf07BFF606225A4FA76AFA55D705B052004
-stKAIA:  0x45886b01276c45Fe337d3758b94DD8D7F3951d97
-
-// DEX Integration
+WKAIA: 0x043c471bEe060e00A56CcD02c0Ca286808a5A436
 Balancer Vault: 0x1c9074AA147648567015287B0d4185Cb4E04F86d
-WKAIA: 0x0339d5Eb6D195Ba90B13ed1BCeAa97EbD198b106
 ```
 
-## 🧪 종합 테스트 시스템
+### LST Protocol Handlers
+```
+wKoKAIA Handler: 0xb15782EFbC2034E366670599F3997f94c7333FF9
+wGCKAIA Handler: 0xe4c732f651B39169648A22F159b815d8499F996c
+wstKLAY Handler: 0x28B13a88E72a2c8d6E93C28dD39125705d78E75F
+stKAIA Handler: 0x4C0d434C7DD74491A52375163a7b724ED387d0b6
+```
 
-프로젝트에는 체계적으로 정리된 통합 테스트 시스템이 포함되어 있습니다:
+### Wrapped LST Tokens
+```
+wKoKAIA: 0x9a93e2fcDEBE43d0f8205D1cd255D709B7598317
+wGCKAIA: 0x324353670B23b16DFacBDE169Cd8ebF8C8bf6601
+wstKLAY: 0x474B49DF463E528223F244670e332fE82742e1aA
+stKAIA: 0x45886b01276c45Fe337d3758b94DD8D7F3951d97
+```
 
-### 🎯 메인 테스트 스위트
+## Security Considerations
+
+1. **Contract Size**: Both contracts are well under the 24KB limit
+2. **Access Control**: Owner-only functions for configuration
+3. **Reentrancy Protection**: NonReentrant guards on all entry points
+4. **Slippage Protection**: 10% slippage tolerance on swaps
+5. **Upgrade Safety**: UUPS pattern with owner-only upgrade authorization
+
+## Development
+
+### Compile Contracts
 ```bash
-# 통합 테스트 실행 (권장)
-yarn test:integration      # 종합 통합 테스트
-
-# 개별 기능 테스트
-yarn test-apy:dev          # APY 시스템 테스트
-yarn reset-apy:dev         # APY 초기화
+npx hardhat compile
 ```
 
-
-### 🏗️ 시스템 관리 도구
+### Check Contract Sizes
 ```bash
-# 통합 테스트
-yarn test:integration      # 통합 테스트 (Testnet)
-yarn test:integration:prod # 통합 테스트 (Mainnet)
-
-# APY 시스템 테스트
-yarn test-apy:dev          # APY 기능 및 분배 테스트
-yarn reset-apy:dev         # 테스트용 APY 값 초기화
-
-# 계약 검증
-yarn sizetest              # 컨트랙트 크기 제한 검증
-yarn test                  # Hardhat 기본 테스트 실행
+npx hardhat size-contracts
 ```
 
-### 📊 테스트 커버리지
-- ✅ **Deposit/Withdraw**: 모든 시나리오 및 edge case 포함
-- ✅ **APY 관리**: 동적 APY 업데이트 및 분배 로직
-- ✅ **Multi-LST Swap**: 복합 멀티 토큰 swap 연산
-- ✅ **Wrap/Unwrap**: 정밀한 수량 계산 및 보정
-- ✅ **슬리피지 보호**: 다양한 슬리피지 시나리오 및 제한
-- ✅ **에러 처리**: 포괄적인 에러 복구 테스트
-- ✅ **업그레이드 호환성**: 컨트랙트 업그레이드 및 마이그레이션
-- ✅ **가스 최적화**: 성능 및 비용 분석
+### Run Unit Tests
+```bash
+npx hardhat test
+```
 
-### 📚 상세 테스트 가이드
-- **[TEST_GUIDE.md](./TEST_GUIDE.md)**: 전체 테스트 가이드
-- **[scripts/README.md](./scripts/README.md)**: 스크립트 구조 및 사용법  
+## Important Notes
 
-## 🎯 프로덕션 준비도
+⚠️ **SwapContract is FINALIZED**: The SwapContract has been thoroughly tested with all 4 LSTs and should NOT be modified. It successfully handles GIVEN_OUT swaps for precise WKAIA output amounts.
 
-### 성숙도 지표
-- **✅ 광범위한 테스트**: 통합 테스트 시스템으로 모든 기능 커버
-- **✅ 다중 업그레이드**: 16회 성공적 컨트랙트 업그레이드 (무중단)
-- **✅ Edge Case 커버리지**: 실패 시나리오의 포괄적 테스트
-- **✅ 가스 최적화**: 배포 제한에 맞춘 컨트랙트 크기 최적화
-- **✅ 보안 감사**: 철저한 내부 테스트 및 검증
-- **✅ 실세계 테스트**: 라이브 트랜잭션을 통한 활발한 테스트넷 배포
+⚠️ **Use V2 Architecture**: The separated vault architecture (ShareVault + VaultCore) is the recommended deployment as it overcomes contract size limitations while maintaining all functionality.
 
-### Key Features Validated
-- **Multi-LST Swap Operations**: Complex token swapping across 4 protocols
-- **Dynamic APY Management**: Real-time yield optimization and asset allocation  
-- **Slippage Protection**: Robust handling of market volatility
-- **Upgrade Compatibility**: Seamless contract upgrades with state preservation
-- **Error Recovery**: Graceful handling of edge cases and failures
-
-### Ready for Mainnet
-The contracts are production-ready and have been thoroughly tested on Kairos testnet. All major functionality has been validated through extensive testing and multiple upgrade cycles.
+## License
+MIT

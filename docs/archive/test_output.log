@@ -1,0 +1,183 @@
+
+════════════════════════════════════════════════════════════════════════════════
+🏢 KOMMUNEFI ENTERPRISE INTEGRATION TEST SUITE
+Simulating Multi-User Production Environment
+════════════════════════════════════════════════════════════════════════════════
+
+📋 Test Configuration:
+  Network: Kairos Testnet
+  Signer: 0xdc926E34E73292cD7c48c6fD7375af7D93435D36
+  User Profiles: 4
+  APY Scenarios: 5
+  Market Conditions: 4
+
+📦 Contracts:
+  KVaultV2: 0xfBF698074Cc9D6496c22faa117616E2038551424
+  SwapContract: 0x829718DBf5e19AB36ab305ac7A7c6C9995bB5F15
+
+💰 Preparing 0.696180000000000002 WKAIA for tests...
+
+════════════════════════════════════════════════════════════════════════════════
+📊 INITIAL STATE
+════════════════════════════════════════════════════════════════════════════════
+
+Vault Metrics:
+  Total Assets: 0.0 WKAIA
+  Total Supply: 0.0 kvKAIA
+  Share Price: 1.0 WKAIA/kvKAIA
+  Utilization Rate: 0 %
+
+LST Distribution:
+  Wrapped tokens: 0
+  Unwrapped tokens: 0
+  Total value: 0.0
+
+════════════════════════════════════════════════════════════════════════════════
+👥 MULTI-USER SIMULATION: Concurrent Operations
+════════════════════════════════════════════════════════════════════════════════
+
+  👤 User Profile: WHALE
+    [User WHALE-0] Depositing 0.01 WKAIA
+      ✅ Success (Gas: 720893)
+    [User WHALE-1] Depositing 0.01 WKAIA
+      ✅ Success (Gas: 609435)
+    [User WHALE-2] Depositing 0.01 WKAIA
+      ✅ Success (Gas: 609435)
+    [User WHALE-2] Withdrawing 10% (0.003 shares)
+      Expected: 0.002999999999999999 WKAIA
+      ❌ Failed: transaction execution reverted (action="sendTransa...
+
+  👤 User Profile: REGULAR
+    [User REGULAR-0] Depositing 0.5 WKAIA
+      ✅ Success (Gas: 609444)
+    [User REGULAR-1] Depositing 1.0 WKAIA
+    [User REGULAR-1] Withdrawing 30% (0.159000000000000025 shares)
+      Expected: 0.158999999999999998 WKAIA
+      ❌ Failed: transaction execution reverted (action="sendTransa...
+    [User REGULAR-2] Depositing 0.75 WKAIA
+
+  👤 User Profile: SMALL
+    [User SMALL-0] Depositing 0.01 WKAIA
+      ✅ Success (Gas: 609435)
+    [User SMALL-1] Depositing 0.05 WKAIA
+      ✅ Success (Gas: 609435)
+    [User SMALL-1] Withdrawing 50% (0.295000000000000047 shares)
+      Expected: 0.294999999999999997 WKAIA
+      ❌ Failed: transaction execution reverted (action="sendTransa...
+    [User SMALL-2] Depositing 0.02 WKAIA
+      ✅ Success (Gas: 609435)
+    [User SMALL-2] Withdrawing 50% (0.305000000000000048 shares)
+      Expected: 0.304999999999999996 WKAIA
+      ❌ Failed: transaction execution reverted (action="sendTransa...
+
+  👤 User Profile: MICRO
+    [User MICRO-0] Depositing 0.001 WKAIA
+      ✅ Success (Gas: 609444)
+    [User MICRO-1] Depositing 0.002 WKAIA
+      ✅ Success (Gas: 609435)
+    [User MICRO-2] Depositing 0.0015 WKAIA
+      ✅ Success (Gas: 609444)
+
+════════════════════════════════════════════════════════════════════════════════
+📈 APY VOLATILITY TEST: Market Condition Changes
+════════════════════════════════════════════════════════════════════════════════
+
+  🎯 Scenario: STABLE_MARKET
+     APY Values: [5%, 5%, 5%, 5%]
+    [User apy-STABLE_MARKET] Depositing 0.01 WKAIA
+      ✅ Success (Gas: 609435)
+     Distribution Check:
+       Wrapped: 3 tokens
+       Unwrapped: 1 tokens
+    [User apy-STABLE_MARKET] Withdrawing 10% (0.062450000000000009 shares)
+      Expected: 0.062449999999999998 WKAIA
+      ❌ Failed: transaction execution reverted (action="sendTransa...
+
+  🎯 Scenario: BULL_MARKET
+     APY Values: [12%, 10%, 9%, 8.5%]
+    [User apy-BULL_MARKET] Depositing 0.01 WKAIA
+      ✅ Success (Gas: 609435)
+     Distribution Check:
+       Wrapped: 3 tokens
+       Unwrapped: 1 tokens
+    [User apy-BULL_MARKET] Withdrawing 10% (0.063450000000000009 shares)
+      Expected: 0.063449999999999998 WKAIA
+      ❌ Failed: transaction execution reverted (action="sendTransa...
+
+  🎯 Scenario: BEAR_MARKET
+     APY Values: [2%, 2.5%, 3%, 1.5%]
+    [User apy-BEAR_MARKET] Depositing 0.01 WKAIA
+      ✅ Success (Gas: 609435)
+     Distribution Check:
+       Wrapped: 3 tokens
+       Unwrapped: 1 tokens
+    [User apy-BEAR_MARKET] Withdrawing 10% (0.06445000000000001 shares)
+      Expected: 0.064449999999999999 WKAIA
+      ❌ Failed: transaction execution reverted (action="sendTransa...
+
+  🎯 Scenario: VOLATILE
+     APY Values: [8%, 3%, 15%, 4%]
+    [User apy-VOLATILE] Depositing 0.01 WKAIA
+      ✅ Success (Gas: 609435)
+     Distribution Check:
+       Wrapped: 3 tokens
+       Unwrapped: 1 tokens
+    [User apy-VOLATILE] Withdrawing 10% (0.06545000000000001 shares)
+      Expected: 0.065449999999999998 WKAIA
+      ❌ Failed: transaction execution reverted (action="sendTransa...
+
+  🎯 Scenario: COMPETITIVE
+     APY Values: [7.55%, 7.45%, 7.65%, 7.38%]
+    [User apy-COMPETITIVE] Depositing 0.01 WKAIA
+      ✅ Success (Gas: 609435)
+     Distribution Check:
+       Wrapped: 3 tokens
+       Unwrapped: 1 tokens
+    [User apy-COMPETITIVE] Withdrawing 10% (0.06645000000000001 shares)
+      Expected: 0.066449999999999998 WKAIA
+      ❌ Failed: transaction execution reverted (action="sendTransa...
+
+════════════════════════════════════════════════════════════════════════════════
+🔥 STRESS TEST: High Frequency Operations
+════════════════════════════════════════════════════════════════════════════════
+    [User stress-0] Depositing 0.001 WKAIA
+      ✅ Success (Gas: 609444)
+
+  📊 Checkpoint 1:
+     Share Price: 0.999999999999999828
+     Utilization: 100%
+    [User stress-1] Depositing 0.002 WKAIA
+      ✅ Success (Gas: 609435)
+    [User stress-2] Withdrawing 25% (0.166875000000000025 shares)
+      Expected: 0.166874999999999996 WKAIA
+      ❌ Failed: transaction execution reverted (action="sendTransa...
+    [User stress-3] Depositing 0.003 WKAIA
+      ✅ Success (Gas: 609444)
+    [User stress-4] Depositing 0.001 WKAIA
+      ✅ Success (Gas: 609444)
+    [User stress-5] Withdrawing 25% (0.167875000000000025 shares)
+      Expected: 0.167874999999999996 WKAIA
+      ❌ Failed: transaction execution reverted (action="sendTransa...
+
+  📊 Checkpoint 2:
+     Share Price: 0.999999999999999828
+     Utilization: 100%
+    [User stress-6] Depositing 0.0005 WKAIA
+      ✅ Success (Gas: 609444)
+    [User stress-7] Depositing 0.003 WKAIA
+      ✅ Success (Gas: 609444)
+    [User stress-8] Withdrawing 25% (0.168750000000000025 shares)
+      Expected: 0.168749999999999996 WKAIA
+      ❌ Failed: transaction execution reverted (action="sendTransa...
+    [User stress-9] Depositing 0.002 WKAIA
+      ✅ Success (Gas: 609435)
+    [User stress-10] Depositing 0.0005 WKAIA
+      ✅ Success (Gas: 609444)
+
+  📊 Checkpoint 3:
+     Share Price: 0.999999999999999827
+     Utilization: 100%
+    [User stress-11] Withdrawing 25% (0.169375000000000025 shares)
+      Expected: 0.169374999999999995 WKAIA
+      ❌ Failed: transaction execution reverted (action="sendTransa...
+    [User stress-12] Depositing 0.001 WKAIA

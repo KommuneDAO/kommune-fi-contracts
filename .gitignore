@@ -27,3 +27,4 @@ contracts/artifacts
 /.states
 /flatten/
 /scripts/tests
+/scripts/tests/

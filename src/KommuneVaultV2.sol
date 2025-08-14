@@ -7,20 +7,19 @@ import {ERC4626Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC2
 import {IAsset, IBalancerVault} from "./interfaces/IBalancerVault.sol";
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {IERC721Enumerable} from "@openzeppelin/contracts/token/ERC721/extensions/IERC721Enumerable.sol";
-import "./interfaces/IGcKaia.sol";
-import {IKoKaia} from "./interfaces/IKoKaia.sol";
-import "./interfaces/IStKaia.sol";
-import {IStKlay} from "./interfaces/IStKlay.sol";
 import {IWKaia} from "./interfaces/IWKaia.sol";
+import {IKoKaia} from "./interfaces/IKoKaia.sol";
+import {IGcKaia} from "./interfaces/IGcKaia.sol";
+import {IStKaia} from "./interfaces/IStKaia.sol";
+import {IStKlay} from "./interfaces/IStKlay.sol";
 import {IWrapped} from "./interfaces/IWrapped.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {SwapContract} from "./SwapContract.sol";
 import {TokenInfo} from "./interfaces/ITokenInfo.sol";
+import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
-import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
 /// @dev ERC-4626 vault with entry/exit fees
@@ -39,7 +38,6 @@ abstract contract ERC4626FeesUpgradeable is ERC4626Upgradeable {
     uint256 public depositLimit;
     uint256 private slippage;
     
-    address public emergencyAdmin;
 
     mapping(uint256 => uint256) public lstAPY;
 
@@ -51,6 +49,9 @@ abstract contract ERC4626FeesUpgradeable is ERC4626Upgradeable {
 
     mapping(uint256 => TokenInfo) public tokensInfo;
     SwapContract public swapContract;
+    mapping(address => uint256) public lastDepositBlock;
+    address public claimManager;
+    address public stakeManager;
 
     event BatchSwap(
         int256 indexed delta0,
@@ -94,14 +95,14 @@ abstract contract ERC4626FeesUpgradeable is ERC4626Upgradeable {
         address[4] memory assets = [0xb15782EFbC2034E366670599F3997f94c7333FF9, 0x4EC04F4D46D7e34EBf0C3932B65068168FDcE7f6, 0x524dCFf07BFF606225A4FA76AFA55D705B052004, 0x45886b01276c45Fe337d3758b94DD8D7F3951d97];
         address[4] memory tokenAs = [0x9a93e2fcDEBE43d0f8205D1cd255D709B7598317, 0x324353670B23b16DFacBDE169Cd8ebF8C8bf6601, 0x474B49DF463E528223F244670e332fE82742e1aA, 0x45886b01276c45Fe337d3758b94DD8D7F3951d97];
         // Correct pool IDs from successful Balancer UI transactions
-        bytes32 pool1_wKoKAIA = 0xdc1503e263d3cf33cf37fb4e5ca953ef20c9e5bb000200000000000000000018;
-        bytes32 pool2_wKoKAIA = 0xc51ebf09fc3f6b2f02b3a1e957a39f88b019e6ae000200000000000000000003;
+        bytes32 pool1_wKoKAIA = 0x8193fe745f2784b1f55e51f71145d2b8b0739b8100020000000000000000000e;
+        bytes32 pool2_wKoKAIA = 0x0c5da2fa11fc2d7eee16c06740072e3c5e1bb4a7000200000000000000000001;
         bytes32 pool1_other = 0x7a665fb838477cbf719f5f34af4b7c1faebb7112000100000000000000000014;
         bytes32 pool2_other = 0x0c5da2fa11fc2d7eee16c06740072e3c5e1bb4a7000200000000000000000001;
         
         // Set correct pools for each LST
-        // wKoKAIA (index 0) uses different pools
-        tokensInfo[0] = TokenInfo(handlers[0], assets[0], tokenAs[0], 0xe8A9F4EB1215dd3EeD0E36D5ca82728DC93f0B48, 0x0339d5Eb6D195Ba90B13ed1BCeAa97EbD198b106, pool1_wKoKAIA, pool2_wKoKAIA);
+        // wKoKAIA (index 0) uses different pool1 but same tokenB as others
+        tokensInfo[0] = TokenInfo(handlers[0], assets[0], tokenAs[0], 0x985acD34f36D91768aD4b0cB295Aa919A7ABDb27, 0x0339d5Eb6D195Ba90B13ed1BCeAa97EbD198b106, pool1_wKoKAIA, pool2_wKoKAIA);
         // wGCKAIA, wstKLAY, stKAIA (indices 1-3) use the same pools
         for (uint i = 1; i < 4; i++) {
             tokensInfo[i] = TokenInfo(handlers[i], assets[i], tokenAs[i], 0x985acD34f36D91768aD4b0cB295Aa919A7ABDb27, 0x0339d5Eb6D195Ba90B13ed1BCeAa97EbD198b106, pool1_other, pool2_other);
@@ -147,25 +148,47 @@ abstract contract ERC4626FeesUpgradeable is ERC4626Upgradeable {
     ) internal virtual override {
         require(assets > 0, "AMP");
         require(deposits[caller].amount + assets <= depositLimit, "DLE");
+        require(block.number > lastDepositBlock[caller], "SBD");
         
         uint256 newDepositAmount = deposits[caller].amount + assets;
         require(newDepositAmount >= deposits[caller].amount, "DAO");
+        
+        lastDepositBlock[caller] = block.number;
         
         super._deposit(caller, receiver, assets, shares);
 
         uint256 amount = _portionOnRaw(assets, investRatio);
         require(amount <= assets, "IAE");
 
-        uint256 balanceBefore = address(this).balance;
-        IWKaia(asset()).withdraw(amount);
-        uint256 balanceAfter = address(this).balance;
-        require(balanceAfter >= balanceBefore + amount, "WWF");
+        // Get current WKAIA balance
+        uint256 wkaiaBalance = IWKaia(asset()).balanceOf(address(this));
+        
+        // Only withdraw if we have WKAIA and need to stake
+        if (amount > 0 && wkaiaBalance > 0) {
+            // Withdraw only what we have or what we need, whichever is smaller
+            uint256 toWithdraw = amount > wkaiaBalance ? wkaiaBalance : amount;
+            
+            uint256 balanceBefore = address(this).balance;
+            IWKaia(asset()).withdraw(toWithdraw);
+            uint256 balanceAfter = address(this).balance;
+            
+            // Verify we received native KAIA (relaxed check for actual amount received)
+            uint256 received = balanceAfter - balanceBefore;
+            require(received > 0, "WWF");
+            
+            // Use the actual received amount for staking
+            amount = received;
+        } else if (amount > 0) {
+            // No WKAIA available to withdraw, skip staking
+            amount = 0;
+        }
 
         stake(amount);
 
         deposits[caller].amount = newDepositAmount;
         deposits[caller].timestamp = block.timestamp;
     }
+    
 
 
     function _withdraw(
@@ -312,9 +335,6 @@ assets.mulDiv(feeBasisPoints, _BASIS_POINT_SCALE, Math.Rounding.Ceil);
         return sum;
     }
 
-    function swap(uint256 index, uint256 amountIn, uint256 numWrap) public returns (int256[] memory) {
-        return swapContract.swap(tokensInfo[index], vault, amountIn, numWrap);
-    }
     
 
 
@@ -338,130 +358,21 @@ assets.mulDiv(feeBasisPoints, _BASIS_POINT_SCALE, Math.Rounding.Ceil);
         emit Slippage(newValue);
     }
 
-    function calcWeight()
-        internal
-        view
-        returns (uint256[4] memory weights, uint256 tw)
-    {
-        tw = 0;
-        for (uint256 i = 0; i < 4; i++) {
-            require(lstAPY[i] >= 10, "ATL");
-            weights[i] = lstAPY[i] / 10;
-            tw += weights[i];
-        }
-        require(tw > 0, "TWP");
-    }
-
-    function distAPY(
-        uint256 totalAmount
-    ) internal view returns (uint256[4] memory distributions) {
-        (
-            uint256[4] memory weights,
-            uint256 tw
-        ) = calcWeight();
-
-        uint256 allocatedAmount = 0;
-        for (uint256 i = 0; i < 3; i++) {
-            distributions[i] = (totalAmount * weights[i]) / tw;
-            allocatedAmount += distributions[i];
-        }
-        // Calculate the last distribution to avoid rounding errors
-        distributions[3] = totalAmount - allocatedAmount;
-    }
 
     function stake(uint256 amount) internal {
-        require(amount > 0, "SMP");
-        require(address(this).balance >= amount, "IBS");
-        
-        uint256[4] memory distributions = distAPY(amount);
-        uint256 totalDistributed = 0;
-
-        for (uint256 i = 0; i < 4; i++) {
-            if (distributions[i] > 0) {
-                require(tokensInfo[i].handler != address(0), "IHA");
-                
-                uint256 balanceBefore = IERC20(tokensInfo[i].asset).balanceOf(address(this));
-                uint256 ethBalanceBefore = address(this).balance;
-                
-                bool success = false;
-                if (i == 0) {
-                    try IKoKaia(tokensInfo[i].handler).stake{value: distributions[i]}() {
-                        success = true;
-                    } catch {}
-                } else if (i == 1) {
-                    try IGcKaia(tokensInfo[i].handler).stake{value: distributions[i]}() {
-                        success = true;
-                    } catch {}
-                } else if (i == 2) {
-                    try IStKlay(tokensInfo[i].handler).stake{value: distributions[i]}() {
-                        success = true;
-                    } catch {}
-                } else if (i == 3) {
-                    try IStKaia(tokensInfo[i].handler).stake{value: distributions[i]}() {
-                        success = true;
-                    } catch {}
-                }
-                
-                if (success) {
-                    uint256 balanceAfter = IERC20(tokensInfo[i].asset).balanceOf(address(this));
-                    uint256 ethBalanceAfter = address(this).balance;
-                    
-                    require(
-                        balanceAfter > balanceBefore || ethBalanceAfter == ethBalanceBefore - distributions[i],
-                        "SVF"
-                    );
-                    
-                    // Wrap LST to Wrapped LST immediately after staking (except stKAIA)
-                    if (i < 3) {  // KoKAIA, GCKAIA, stKLAY need wrapping
-                        uint256 lstReceived = balanceAfter - balanceBefore;
-                        if (lstReceived > 0) {
-                            _wrapLST(i, lstReceived);
-                        }
-                    }
-                    // stKAIA (i == 3) doesn't need wrapping as it doesn't have wrapped version
-                    
-                    totalDistributed += distributions[i];
-                    emit StakingSuccess(i, distributions[i]);
-                }
-            }
-        }
-        
-        require(totalDistributed > 0, "NSO");
+        require(stakeManager != address(0), "SMS");
+        (bool success,) = stakeManager.delegatecall(
+            abi.encodeWithSignature("executeStake(uint256)", amount)
+        );
+        require(success, "SF");
     }
 
     function _wrapLST(uint256 protocolIndex, uint256 amount) internal {
-        require(protocolIndex < 3, "Invalid protocol index for wrapping");
-        require(amount > 0, "Amount must be greater than 0");
-        
-        address lstToken = tokensInfo[protocolIndex].asset;
-        address wrappedToken = tokensInfo[protocolIndex].tokenA;
-        
-        // Check current allowance and only approve if needed
-        uint256 currentAllowance = IERC20(lstToken).allowance(address(this), wrappedToken);
-        if (currentAllowance < amount) {
-            // Reset to 0 first, then approve exact amount needed
-            IERC20(lstToken).approve(wrappedToken, 0);
-            IERC20(lstToken).approve(wrappedToken, amount);
-        }
-        
-        // Get wrapped balance before
-        uint256 wrappedBalanceBefore = IWrapped(wrappedToken).balanceOf(address(this));
-        
-        // Wrap the LST
-        try IWrapped(wrappedToken).wrap(amount) {
-            // Verify wrapping was successful
-            uint256 wrappedBalanceAfter = IWrapped(wrappedToken).balanceOf(address(this));
-            uint256 wrappedReceived = wrappedBalanceAfter - wrappedBalanceBefore;
-            require(wrappedReceived > 0, "Wrapping failed - no wrapped tokens received");
-            
-            emit LSTWrapped(protocolIndex, amount, wrappedReceived);
-        } catch Error(string memory reason) {
-            emit LSTWrapFailed(protocolIndex, amount, reason);
-            // Even if wrapping fails, we continue as we still have the LST
-        } catch {
-            emit LSTWrapFailed(protocolIndex, amount, "Unknown wrapping error");
-            // Even if wrapping fails, we continue as we still have the LST
-        }
+        require(stakeManager != address(0), "SMS");
+        (bool success,) = stakeManager.delegatecall(
+            abi.encodeWithSignature("executeWrapLST(uint256,uint256)", protocolIndex, amount)
+        );
+        require(success, "WF");
     }
 
     struct AssetBalance {
@@ -612,10 +523,6 @@ assets.mulDiv(feeBasisPoints, _BASIS_POINT_SCALE, Math.Rounding.Ceil);
         }
     }
 
-    function estimateSwap(uint256 index, uint256 amountOut) internal returns (int256[] memory) {
-        // Call SwapContract's estimateSwapGivenOut function
-        return swapContract.estimateSwapGivenOut(tokensInfo[index], vault, amountOut);
-    }
     
     function execWithdraw(uint256 amt) internal {
         WithdrawPlan memory plan = planWithdraw(amt);
@@ -637,69 +544,58 @@ assets.mulDiv(feeBasisPoints, _BASIS_POINT_SCALE, Math.Rounding.Ceil);
         emit MultiAssetWithdraw(amt, used, swp);
     }
 
-
     function _performSmartSwap(uint256 index, uint256 amt) internal {
         if (amt == 0) return;
         
         AssetBalance[4] memory balances = getLSTBalances();
         if (balances[index].totalValue == 0) return;
 
+        // ALL LSTs (including stKAIA) must use batchSwap for immediate liquidity
+        // Handler unstake requires 1 week waiting period + claim, cannot be used for withdrawals
+        
         if (index == 3) {
-            // stKAIA unstaking logic (no wrapped version)
-            uint256 targetAmount = (amt * 110) / 100; // 10% buffer for stKAIA
-            uint256 needed;
-            unchecked {
-                needed = IStKaia(tokensInfo[index].asset).getRatioStakingTokenByNativeToken(targetAmount);
-                if (needed > balances[index].balance) needed = balances[index].balance;
-            }
-
-            if (needed > 0) {
-                SafeERC20.forceApprove(IERC20(tokensInfo[index].asset), tokensInfo[index].handler, needed);
-                IStKaia(tokensInfo[index].handler).unstake(BugHole, address(this), needed);
-
-                uint256 kaia = address(this).balance;
-                if (kaia > 0) IWKaia(asset()).deposit{value: kaia}();
+            // stKAIA - use swap instead of unstake (unstake requires 1 week wait)
+            // stKAIA is not wrapped, so use the asset directly
+            uint256 availableStKAIA = balances[index].balance;
+            
+            if (availableStKAIA > 0) {
+                // Transfer stKAIA to SwapContract
+                SafeERC20.safeTransfer(IERC20(tokensInfo[index].asset), address(swapContract), availableStKAIA);
+                
+                // Execute GIVEN_OUT swap to get exact WKAIA amount needed
+                uint256 targetAmount = (amt * 110) / 100; // 10% buffer for slippage tolerance
+                int256[] memory deltas = swapContract.swapGivenOut(tokensInfo[index], vault, targetAmount, availableStKAIA);
+                emit BatchSwap(deltas[0], deltas[1], deltas[2]);
+                
+                // Safe absolute value conversion using SafeCast
+                uint256 absValue;
+                if (deltas[2] >= 0) {
+                    absValue = SafeCast.toUint256(deltas[2]);
+                } else {
+                    // Handle negative values safely
+                    if (deltas[2] == type(int256).min) {
+                        // Special case: type(int256).min cannot be negated safely
+                        revert("Swap delta too negative");
+                    } else {
+                        absValue = SafeCast.toUint256(-deltas[2]);
+                    }
+                }
+                emit SwapInfo(index, amt, absValue);
             }
         } else {
             // For KoKAIA, GCKAIA, stKLAY - we already have wrapped tokens
-            // Use estimateSwap to verify GIVEN_OUT swap is possible
+            // Use GIVEN_OUT swap to get exact amount needed
             
             uint256 availableWrapped = balances[index].wrapBal;
             
             if (availableWrapped > 0) {
-                // Add 3% buffer for slippage
-                uint256 amountWithBuffer = (amt * 103) / 100;
-                
-                // Make sure we don't request more than theoretically possible
-                if (amountWithBuffer > balances[index].totalValue) {
-                    amountWithBuffer = balances[index].totalValue;
-                }
-                
-                // First estimate the swap to check if we have enough wrapped tokens
-                int256[] memory estimatedDeltas = estimateSwap(index, amountWithBuffer);
-                
-                // Check if the required input amount exceeds our available wrapped balance
-                // estimatedDeltas[0] is negative (amount in), so we need to convert to positive
-                uint256 requiredInput = estimatedDeltas[0] < 0 ? uint256(-estimatedDeltas[0]) : uint256(estimatedDeltas[0]);
-                
-                // If we don't have enough wrapped tokens, adjust the output amount
-                uint256 actualAmountOut = amountWithBuffer;
-                if (requiredInput > availableWrapped) {
-                    // Calculate the maximum output we can get with available wrapped tokens
-                    // Proportionally reduce the output amount
-                    actualAmountOut = (amountWithBuffer * availableWrapped) / requiredInput;
-                    
-                    // Make sure we at least try to get the minimum required amount
-                    if (actualAmountOut < amt) {
-                        actualAmountOut = amt;  // Try with original amount without buffer
-                    }
-                }
-                
-                // Transfer wrapped tokens to SwapContract
+                // Transfer all available wrapped tokens to SwapContract
                 SafeERC20.safeTransfer(IERC20(tokensInfo[index].tokenA), address(swapContract), availableWrapped);
                 
-                // Execute GIVEN_OUT swap with adjusted amount
-                int256[] memory deltas = swapContract.swapGivenOut(tokensInfo[index], vault, actualAmountOut, availableWrapped);
+                // Execute GIVEN_OUT swap to get exact WKAIA amount needed
+                // Add buffer to account for slippage
+                uint256 targetAmount = (amt * 110) / 100; // 10% buffer for slippage tolerance
+                int256[] memory deltas = swapContract.swapGivenOut(tokensInfo[index], vault, targetAmount, availableWrapped);
                 emit BatchSwap(deltas[0], deltas[1], deltas[2]);
                 
                 // Safe absolute value conversion using SafeCast
@@ -721,18 +617,12 @@ assets.mulDiv(feeBasisPoints, _BASIS_POINT_SCALE, Math.Rounding.Ceil);
     }
 }
 
-contract KVaultV2 is ERC4626FeesUpgradeable, OwnableUpgradeable, ReentrancyGuardUpgradeable, PausableUpgradeable {
+contract KVaultV2 is ERC4626FeesUpgradeable, OwnableUpgradeable, ReentrancyGuardUpgradeable, UUPSUpgradeable {
     using Math for uint256;
     address payable public vaultOwner;
     
 
-    mapping(address => bool) public operators;
-
-
-    event Operator(uint256 indexed, address indexed);
     event APYUpdated(uint256 indexed index, uint256 oldAPY, uint256 newAPY);
-    event EmergencyPause(address indexed admin, uint256 timestamp);
-    event EmergencyUnpause(address indexed admin, uint256 timestamp);
 
     function _initDefaultAPY() private {
         lstAPY[0] = 5000;
@@ -754,11 +644,7 @@ contract KVaultV2 is ERC4626FeesUpgradeable, OwnableUpgradeable, ReentrancyGuard
         __ERC4626Fees_init(basisPointsFees, investRatio, treasury, vault);
         __Ownable_init(msg.sender);
         __ReentrancyGuard_init();
-        __Pausable_init();
-
         vaultOwner = payable(msg.sender);
-        operators[msg.sender] = true;
-        emergencyAdmin = msg.sender;
         
         swapContract = SwapContract(_swapContract);
         _initTokenInfo();
@@ -768,124 +654,146 @@ contract KVaultV2 is ERC4626FeesUpgradeable, OwnableUpgradeable, ReentrancyGuard
     receive() external payable {}
 
     // Override ERC4626 functions to add security modifiers
-    function deposit(uint256 assets, address receiver) public virtual override nonReentrant whenNotPaused returns (uint256) {
+    function deposit(uint256 assets, address receiver) public virtual override nonReentrant returns (uint256) {
         return super.deposit(assets, receiver);
     }
 
-    function mint(uint256 shares, address receiver) public virtual override nonReentrant whenNotPaused returns (uint256) {
+    function mint(uint256 shares, address receiver) public virtual override nonReentrant returns (uint256) {
         return super.mint(shares, receiver);
     }
 
-    function withdraw(uint256 assets, address receiver, address owner) public virtual override nonReentrant whenNotPaused returns (uint256) {
+    function withdraw(uint256 assets, address receiver, address owner) public virtual override nonReentrant returns (uint256) {
         return super.withdraw(assets, receiver, owner);
     }
 
-    function redeem(uint256 shares, address receiver, address owner) public virtual override nonReentrant whenNotPaused returns (uint256) {
+    function redeem(uint256 shares, address receiver, address owner) public virtual override nonReentrant returns (uint256) {
         return super.redeem(shares, receiver, owner);
+    }
+    
+    // Native KAIA deposit function (payable)
+    function depositKAIA(address receiver) public payable nonReentrant returns (uint256 shares) {
+        require(msg.value > 0, "AMP");
+        uint256 assets = msg.value;
+        
+        // Check deposit limit
+        require(deposits[msg.sender].amount + assets <= depositLimit, "DLE");
+        require(block.number > lastDepositBlock[msg.sender], "SBD");
+        
+        // Calculate shares based on WKAIA value (1:1 with KAIA)
+        shares = previewDeposit(assets);
+        require(shares > 0, "ZS");
+        
+        // Update deposit tracking
+        uint256 newDepositAmount = deposits[msg.sender].amount + assets;
+        require(newDepositAmount >= deposits[msg.sender].amount, "DAO");
+        lastDepositBlock[msg.sender] = block.number;
+        
+        // Mint shares to receiver
+        _mint(receiver, shares);
+        
+        // Calculate amount to stake (directly use native KAIA)
+        uint256 amountToStake = assets * investRatio / 10000;
+        uint256 amountToWrap = assets - amountToStake;
+        
+        // Stake the investRatio portion directly with native KAIA
+        if (amountToStake > 0) {
+            stake(amountToStake);
+        }
+        
+        // Wrap the remaining KAIA for liquidity/withdrawals
+        if (amountToWrap > 0) {
+            IWKaia(asset()).deposit{value: amountToWrap}();
+        }
+        
+        // Update deposit info
+        deposits[msg.sender].amount = newDepositAmount;
+        deposits[msg.sender].timestamp = block.timestamp;
+        
+        emit Deposit(msg.sender, receiver, assets, shares);
+        
+        return shares;
     }
 
 
 
     
     function setAPY(uint256 index, uint256 apy) public onlyOwner {
-        require(index < 4, "IPI");
-        require(apy <= 10000, "APY");
+        require(claimManager != address(0), "CMS");
         
-        uint256 oldAPY = lstAPY[index] / 10;
-        lstAPY[index] = apy * 10;
-        emit APYUpdated(index, oldAPY, apy);
+        (bool success,) = claimManager.delegatecall(
+            abi.encodeWithSignature("executeSetAPY(uint256,uint256)", index, apy)
+        );
+        require(success, "SAF");
+        
+        emit APYUpdated(index, lstAPY[index] / 10, apy);
     }
 
-    function getAPY(uint256 index) public view returns (uint256) {
-        require(index < 4, "II");
-        return lstAPY[index] / 10;
-    }
     function setMultipleAPY(uint256[4] calldata apyValues) external onlyOwner {
+        require(claimManager != address(0), "CMS");
+        
+        // Store old values for events
+        uint256[4] memory oldAPYs;
         for (uint256 i = 0; i < 4; i++) {
-            require(apyValues[i] <= 10000, "APY");
-            uint256 oldAPY = lstAPY[i] / 10;
-            lstAPY[i] = apyValues[i] * 10;
-            emit APYUpdated(i, oldAPY, apyValues[i]);
+            oldAPYs[i] = lstAPY[i] / 10;
+        }
+        
+        (bool success,) = claimManager.delegatecall(
+            abi.encodeWithSignature("executeSetMultipleAPY(uint256[4])", apyValues)
+        );
+        require(success, "SMAF");
+        
+        // Emit events
+        for (uint256 i = 0; i < 4; i++) {
+            emit APYUpdated(i, oldAPYs[i], apyValues[i]);
         }
     }
 
-    function getAllAPY() public view returns (uint256[4] memory) {
-        uint256[4] memory apys;
-        for (uint256 i = 0; i < 4; i++) {
-            apys[i] = lstAPY[i] / 10;
-        }
-        return apys;
-    }
 
-    function addOperator(address addr) public onlyOwner {
-        operators[addr] = true;
-        emit Operator(1, addr);
+    // Set ClaimManager address for delegatecall operations
+    function setClaimManager(address _claimManager) external onlyOwner {
+        require(_claimManager != address(0), "IA");
+        claimManager = _claimManager;
     }
-
     
-    function emergencyPause() external {
-        require(msg.sender == emergencyAdmin || msg.sender == owner(), "NA");
-        _pause();
-        emit EmergencyPause(msg.sender, block.timestamp);
+    // Set StakeManager address for delegatecall operations
+    function setStakeManager(address _stakeManager) external onlyOwner {
+        require(_stakeManager != address(0), "IA");
+        stakeManager = _stakeManager;
     }
-    function emergencyUnpause() external onlyOwner {
-        _unpause();
-        emit EmergencyUnpause(msg.sender, block.timestamp);
-    }
-
+    
+    // Unstake function using delegatecall to reduce contract size
     function unstake(uint256 index, uint256 amount) public onlyOwner nonReentrant {
-        require(index < 4, "II");
-        if (index == 0) IKoKaia(tokensInfo[index].handler).unstake(amount);
-        else if (index == 1) IGcKaia(tokensInfo[index].handler).unstake(amount);
-        else if (index == 2) IStKlay(tokensInfo[index].handler).unstake(amount);
-        else IStKaia(tokensInfo[index].handler).unstake(BugHole, msg.sender, amount);
+        require(claimManager != address(0), "CMS");
+        
+        (bool success,) = claimManager.delegatecall(
+            abi.encodeWithSignature("executeUnstake(uint256,uint256)", index, amount)
+        );
+        
+        require(success, "UF");
     }
 
+    // Claim function using delegatecall to reduce contract size
     function claim(uint256 index, address user) public onlyOwner nonReentrant {
-        require(index < 4, "II");
-        if (index == 0) IKoKaia(tokensInfo[index].handler).claim(user);
-        else if (index == 1) {
-            uint256 id;
-            assembly {
-                id := chainid()
-            }
-            if (id == 8217) {
-                IERC721Enumerable uGCKAIA = IERC721Enumerable(
-                    0x000000000fa7F32F228e04B8bffFE4Ce6E52dC7E
-                );
-                uint256 count = uGCKAIA.balanceOf(user);
-                uint256[] memory ids = new uint256[](count);
-                for (uint256 i; i < count; ++i) {
-                    ids[i] = uGCKAIA.tokenOfOwnerByIndex(user, i);
-                }
-                for (uint256 i; i < count; ++i) {
-                    (,uint256 withdrawableFrom, WithdrawalRequestState state) = IGcKaia(
-                        tokensInfo[index].handler
-                    ).withdrawalRequestInfo(ids[i]);
-                    if (state == WithdrawalRequestState.Unknown && withdrawableFrom < block.timestamp) {
-                        IGcKaia(tokensInfo[index].handler).claim(ids[i]);
-                    }
-                }
-            }
-        }
-        else if (index == 2) IStKlay(tokensInfo[index].handler).claim(user);
-        else if (index == 3) {
-            uint256 length = IStKaia(tokensInfo[index].handler)
-                .getUnstakeRequestInfoLength(user);
-            UnstakeInfo[] memory infos = IStKaia(tokensInfo[index].handler)
-                .getUnstakeInfos(
-                    user,
-                    0,
-                    length
-                );
-            for (uint256 i; i < infos.length; ++i) {
-                if (infos[i].unstakeTime + 604800 < block.timestamp) {
-                    IStKaia(tokensInfo[index].handler).claim(
-                        user,
-                        infos[i].unstakeId
-                    );
-                }
-            }
-        }
+        require(claimManager != address(0), "CMS");
+        
+        (bool success,) = claimManager.delegatecall(
+            abi.encodeWithSignature("executeClaim(uint256,address)", index, user)
+        );
+        
+        require(success, "CF");
     }
+    
+    // Batch claim function for multiple users
+    function batchClaim(uint256[] calldata indices, address[] calldata users) external onlyOwner nonReentrant {
+        require(claimManager != address(0), "CMS");
+        
+        (bool success,) = claimManager.delegatecall(
+            abi.encodeWithSignature("executeBatchClaim(uint256[],address[])", indices, users)
+        );
+        
+        require(success, "BCF");
+    }
+    
+    // Required for UUPS upgradeable pattern
+    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 }

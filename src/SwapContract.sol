@@ -35,10 +35,14 @@ contract SwapContract is Initializable, OwnableUpgradeable {
             require(balanceAfter > balanceBefore, "Wrap failed: no tokens received");
         }
         
+        // Check actual balance of wrapped tokens (might be sent from outside)
+        uint256 actualBalance = IERC20(token.tokenA).balanceOf(address(this));
+        uint256 amountToApprove = amountIn > 0 ? amountIn : actualBalance;
+        
         // Safe approve pattern for tokenA → vault
-        if (amountIn > 0) {
+        if (amountToApprove > 0) {
             IERC20(token.tokenA).approve(vault, 0);
-            IERC20(token.tokenA).approve(vault, amountIn);
+            IERC20(token.tokenA).approve(vault, amountToApprove);
         }
 
         // Create assets array and sort by address
@@ -134,7 +138,7 @@ contract SwapContract is Initializable, OwnableUpgradeable {
         address vault,
         uint256 amountOut
     ) public returns (int256[] memory) {
-        // Create assets array and sort by address
+        // Create assets array and sort by address (Balancer requirement)
         address[] memory tokenAddresses = new address[](3);
         tokenAddresses[0] = token.tokenA;
         tokenAddresses[1] = token.tokenB;
@@ -151,11 +155,6 @@ contract SwapContract is Initializable, OwnableUpgradeable {
             }
         }
         
-        IAsset[] memory assets = new IAsset[](3);
-        assets[0] = IAsset(tokenAddresses[0]);
-        assets[1] = IAsset(tokenAddresses[1]);
-        assets[2] = IAsset(tokenAddresses[2]);
-        
         // Find correct indices after sorting
         uint256 tokenAIndex;
         uint256 tokenBIndex;
@@ -166,6 +165,11 @@ contract SwapContract is Initializable, OwnableUpgradeable {
             else if (tokenAddresses[i] == token.tokenB) tokenBIndex = i;
             else if (tokenAddresses[i] == token.tokenC) tokenCIndex = i;
         }
+        
+        IAsset[] memory assets = new IAsset[](3);
+        assets[0] = IAsset(tokenAddresses[0]);
+        assets[1] = IAsset(tokenAddresses[1]);
+        assets[2] = IAsset(tokenAddresses[2]);
 
         IBalancerVault.BatchSwapStep[] memory steps = new IBalancerVault.BatchSwapStep[](2);
         // For GIVEN_OUT, we specify the exact output and work backwards
@@ -194,11 +198,6 @@ contract SwapContract is Initializable, OwnableUpgradeable {
             toInternalBalance: false
         });
 
-        int256[] memory limits = new int256[](3);
-        limits[tokenAIndex] = type(int256).max;           // No limit for tokenA input
-        limits[tokenBIndex] = 0;                          // No limit for tokenB intermediate  
-        limits[tokenCIndex] = amountOut <= uint256(type(int256).max) ? int256(amountOut) : type(int256).max; // Exact output for tokenC
-
         int256[] memory deltas = IBalancerVault(vault).queryBatchSwap(
             IBalancerVault.SwapKind.GIVEN_OUT,
             steps,
@@ -216,17 +215,20 @@ contract SwapContract is Initializable, OwnableUpgradeable {
         uint256 amountOut,  // Desired WKAIA amount
         uint256 maxAmountIn  // Maximum wrapped LST to use
     ) external returns (int256[] memory) {
-        // Approve wrapped token for Balancer vault
-        if (maxAmountIn > 0) {
+        // Check actual balance and approve
+        uint256 actualBalance = IERC20(token.tokenA).balanceOf(address(this));
+        uint256 amountToApprove = actualBalance < maxAmountIn ? actualBalance : maxAmountIn;
+        
+        if (amountToApprove > 0) {
             IERC20(token.tokenA).approve(vault, 0);
-            IERC20(token.tokenA).approve(vault, maxAmountIn);
+            IERC20(token.tokenA).approve(vault, amountToApprove);
         }
 
-        // Create assets array and sort by address
+        // Create assets array and sort by address (Balancer requirement)
         address[] memory tokenAddresses = new address[](3);
-        tokenAddresses[0] = token.tokenA;  // Wrapped LST
-        tokenAddresses[1] = token.tokenB;  // Intermediate token
-        tokenAddresses[2] = token.tokenC;  // WKAIA
+        tokenAddresses[0] = token.tokenA;
+        tokenAddresses[1] = token.tokenB;
+        tokenAddresses[2] = token.tokenC;
         
         // Simple bubble sort for 3 elements
         for (uint i = 0; i < 2; i++) {
@@ -239,11 +241,6 @@ contract SwapContract is Initializable, OwnableUpgradeable {
             }
         }
         
-        IAsset[] memory assets = new IAsset[](3);
-        assets[0] = IAsset(tokenAddresses[0]);
-        assets[1] = IAsset(tokenAddresses[1]);
-        assets[2] = IAsset(tokenAddresses[2]);
-        
         // Find correct indices after sorting
         uint256 tokenAIndex;
         uint256 tokenBIndex;
@@ -254,6 +251,11 @@ contract SwapContract is Initializable, OwnableUpgradeable {
             else if (tokenAddresses[i] == token.tokenB) tokenBIndex = i;
             else if (tokenAddresses[i] == token.tokenC) tokenCIndex = i;
         }
+        
+        IAsset[] memory assets = new IAsset[](3);
+        assets[0] = IAsset(tokenAddresses[0]);
+        assets[1] = IAsset(tokenAddresses[1]);
+        assets[2] = IAsset(tokenAddresses[2]);
 
         // For GIVEN_OUT, swap steps are in reverse order!
         IBalancerVault.BatchSwapStep[] memory steps = new IBalancerVault.BatchSwapStep[](2);
@@ -278,8 +280,9 @@ contract SwapContract is Initializable, OwnableUpgradeable {
 
         // Set limits for GIVEN_OUT swap
         int256[] memory limits = new int256[](3);
-        limits[tokenAIndex] = maxAmountIn <= uint256(type(int256).max) ? int256(maxAmountIn) : type(int256).max; // Max wrapped LST to use
-        limits[tokenBIndex] = 0;  // No limit for intermediate token
+        // Use actual balance as the limit for tokenA
+        limits[tokenAIndex] = amountToApprove <= uint256(type(int256).max) ? int256(amountToApprove) : type(int256).max; // Max wrapped LST to use
+        limits[tokenBIndex] = type(int256).max;  // Allow any amount for intermediate token
         limits[tokenCIndex] = amountOut <= uint256(type(int256).max) ? -int256(amountOut) : type(int256).min; // Min WKAIA to receive (negative)
 
         IBalancerVault.FundManagement memory funds = IBalancerVault.FundManagement({
