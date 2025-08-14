@@ -1,0 +1,143 @@
+{
+  "milestones": [
+    {
+      "title": "v1.0.0 - Architecture & Core Development",
+      "description": "Initial architecture design and core contract development including ShareVault, VaultCore, and SwapContract",
+      "state": "closed",
+      "due_on": "2025-08-10T00:00:00Z",
+      "closed_at": "2025-08-10T00:00:00Z",
+      "labels": ["architecture", "core", "completed"]
+    },
+    {
+      "title": "v1.1.0 - LST Integration",
+      "description": "Integration of 4 LST protocols (wKoKAIA, wGCKAIA, wstKLAY, stKAIA) with unified handling",
+      "state": "closed",
+      "due_on": "2025-08-12T00:00:00Z",
+      "closed_at": "2025-08-12T00:00:00Z",
+      "labels": ["integration", "LST", "completed"]
+    },
+    {
+      "title": "v1.2.0 - Testing & Optimization",
+      "description": "Comprehensive testing suite, gas optimization, and critical bug fixes",
+      "state": "closed",
+      "due_on": "2025-08-14T00:00:00Z",
+      "closed_at": "2025-08-14T00:00:00Z",
+      "labels": ["testing", "optimization", "completed"]
+    },
+    {
+      "title": "v1.3.0 - ClaimManager & Unstaking",
+      "description": "Implementation of ClaimManager for unstake/claim operations with 7-day waiting period",
+      "state": "closed",
+      "due_on": "2025-08-15T00:00:00Z",
+      "closed_at": "2025-08-15T00:00:00Z",
+      "labels": ["feature", "claim", "completed"]
+    },
+    {
+      "title": "v1.4.0 - Documentation & Organization",
+      "description": "Complete documentation, script organization, and developer guides",
+      "state": "open",
+      "due_on": "2025-08-20T00:00:00Z",
+      "labels": ["documentation", "organization", "in-progress"],
+      "issues": [
+        {
+          "title": "Test Unstake/Claim functionality for all LST protocols",
+          "labels": ["testing", "critical", "claim"],
+          "state": "open",
+          "body": "- Test unstake for wKoKAIA, wGCKAIA, wstKLAY, stKAIA\n- Verify 7-day waiting period enforcement\n- Test claim execution after waiting period\n- Test batch claim functionality\n- Verify ClaimManager delegatecall integration"
+        },
+        {
+          "title": "Fix intermittent WETH error during WKAIA deposits",
+          "labels": ["bug", "critical", "WKAIA"],
+          "state": "open",
+          "body": "- Intermittent 'WETH' error during WKAIA deposits\n- Occurs sporadically, not consistently reproducible\n- May be related to WKAIA/WETH interface confusion\n- Check IWETH9 interface usage in contracts\n- Implement permanent fix and add regression tests"
+        },
+        {
+          "title": "Complete API documentation",
+          "labels": ["documentation"],
+          "state": "open"
+        },
+        {
+          "title": "Create user guide",
+          "labels": ["documentation"],
+          "state": "open"
+        },
+        {
+          "title": "Security audit documentation",
+          "labels": ["security", "documentation"],
+          "state": "open"
+        }
+      ]
+    },
+    {
+      "title": "v2.0.0 - Mainnet Preparation",
+      "description": "Security audit, mainnet configuration, and production readiness",
+      "state": "open",
+      "due_on": "2025-08-25T00:00:00Z",
+      "labels": ["mainnet", "security", "planned"],
+      "issues": [
+        {
+          "title": "Complete security audit",
+          "labels": ["security", "critical"],
+          "state": "open"
+        },
+        {
+          "title": "Setup mainnet deployment scripts",
+          "labels": ["deployment"],
+          "state": "open"
+        },
+        {
+          "title": "Configure monitoring and alerts",
+          "labels": ["monitoring"],
+          "state": "open"
+        },
+        {
+          "title": "Setup multi-sig wallet",
+          "labels": ["security"],
+          "state": "open"
+        },
+        {
+          "title": "Verify mainnet LST pools",
+          "labels": ["verification"],
+          "state": "open"
+        }
+      ]
+    },
+    {
+      "title": "v2.1.0 - Mainnet Launch",
+      "description": "Phased mainnet launch with soft launch, beta, and full public release",
+      "state": "open",
+      "due_on": "2025-08-31T00:00:00Z",
+      "labels": ["mainnet", "launch", "planned"],
+      "issues": [
+        {
+          "title": "Soft launch with deposit caps",
+          "labels": ["launch", "phase1"],
+          "state": "open"
+        },
+        {
+          "title": "Beta launch with increased limits",
+          "labels": ["launch", "phase2"],
+          "state": "open"
+        },
+        {
+          "title": "Full public launch",
+          "labels": ["launch", "phase3"],
+          "state": "open"
+        },
+        {
+          "title": "Marketing campaign",
+          "labels": ["marketing"],
+          "state": "open"
+        }
+      ]
+    },
+    {
+      "title": "v3.0.0 - Cross-chain & Governance",
+      "description": "Cross-chain integration and governance implementation",
+      "state": "open",
+      "due_on": "2025-09-30T00:00:00Z",
+      "labels": ["future", "governance", "cross-chain"],
+      "issues": []
+    }
+  ]
+}

@@ -26,5 +26,4 @@ contracts/artifacts
 /src/artifacts
 /.states
 /flatten/
-/scripts/tests
-/scripts/tests/
+/scripts/temp/

@@ -9,12 +9,13 @@ KommuneFi is a liquid staking protocol on Kaia blockchain that allows users to d
 The protocol uses a separated architecture to overcome contract size limitations:
 
 - **ShareVault** (12.23 KB): ERC-4626 compliant contract managing shares (kvKAIA tokens)
-- **VaultCore** (10.17 KB): Core logic for LST management and asset handling
+- **VaultCore** (10.17 KB): Core logic for LST management, asset handling, and unstake/claim operations
 - **SwapContract** (9.26 KB): Handles Balancer pool swaps for withdrawals (**FINALIZED - DO NOT MODIFY**)
+- **ClaimManager**: Handles unstake/claim operations via delegatecall to reduce VaultCore size
 
 ### Previous Architecture (V1)
-- **KommuneVault**: Original single contract implementation
-- **KVaultV2**: Optimized version with helper contracts (reached size limit)
+- **KommuneVault**: Original single contract implementation (reference)
+- **KommuneVaultV2**: Optimized version (reached 24KB limit, reference for swap logic)
 
 ### Supported LST Protocols
 1. **wKoKAIA** (Index 0): Wrapped KoKaia protocol tokens
@@ -28,33 +29,51 @@ The protocol uses a separated architecture to overcome contract size limitations
 ```bash
 npm install
 cp .env.example .env
-# Configure your private key in .env
+# Configure in .env:
+# - PRIVATE_KEY (main deployer wallet)
+# - TESTER1_PRIV_KEY (test wallet 2)
+# - TESTER2_PRIV_KEY (test wallet 3)
 ```
 
-### Deploy Separated Vault Architecture (V2)
+### Deploy Fresh Contracts
 ```bash
-# Deploy ShareVault and VaultCore (Kairos testnet)
-npx hardhat run scripts/deploySeparatedVault.js --network kairos
-# Creates: deployments-kairos.json
+# Testnet deployment
+npm run deploy:testnet          # Deploy all V2 contracts to Kairos
+npm run setup:testnet           # Configure APY values
+npm run test:testnet            # Run integrated tests
 
-# Deploy to mainnet
-npx hardhat run scripts/deploySeparatedVault.js --network kaia
-# Creates: deployments-kaia.json
-
-# Configure APY and parameters
-npx hardhat run scripts/setupSeparatedVault.js --network kairos
+# Mainnet deployment
+npm run deploy:mainnet          # Deploy all V2 contracts to Kaia
+npm run setup:mainnet           # Configure APY values
+npm run test:mainnet            # Run integrated tests
 ```
 
 ### Upgrade Existing Deployment
 ```bash
-npx hardhat run scripts/upgradeSeparatedVault.js --network kairos
+# Testnet upgrades
+npm run upgrade:testnet         # Upgrade VaultCore (default)
+npm run upgrade:testnet:core    # Upgrade VaultCore only
+npm run upgrade:testnet:share   # Upgrade ShareVault only
+npm run upgrade:testnet:swap    # Deploy new SwapContract
+npm run deploy:testnet:claim    # Deploy ClaimManager (first time)
+npm run upgrade:testnet:claim   # Upgrade ClaimManager
+
+# Mainnet upgrades
+npm run upgrade:mainnet         # Upgrade VaultCore (default)
+npm run upgrade:mainnet:core    # Upgrade VaultCore only
+npm run upgrade:mainnet:share   # Upgrade ShareVault only
+npm run upgrade:mainnet:swap    # Deploy new SwapContract
+npm run deploy:mainnet:claim    # Deploy ClaimManager (first time)
+npm run upgrade:mainnet:claim   # Upgrade ClaimManager
+
+# Direct script execution (for custom options)
+npx hardhat run scripts/upgradeContracts.js --network kairos -- --all
 ```
 
-### Deploy V1 (Legacy)
+### V1 Legacy Commands (DO NOT USE)
 ```bash
-# V1 deployment (KommuneVault)
-npx hardhat run scripts/deploy.js --network kairos
-npx hardhat run scripts/upgrade.js --network kairos
+npm run deploy:v1:testnet       # V1 deployment (deprecated)
+npm run upgrade:v1:testnet      # V1 upgrade (deprecated)
 ```
 
 ## Current Deployment (Kairos Testnet)
@@ -86,53 +105,51 @@ Default APY configuration (set via `setupSeparatedVault.js`):
 
 ## Testing
 
-### Test Results Summary
-All core features have been thoroughly tested and verified:
-
-#### ✅ Completed Tests:
-1. **Basic Deposits**
-   - WKAIA deposits with share minting
-   - Native KAIA deposits with automatic wrapping
-   - APY-based distribution to all 4 LSTs
-   - Automatic wrapping for wKoKAIA, wGCKAIA, wstKLAY
-
-2. **Multi-Wallet Deposits** 
-   - 3 wallets × 10 rounds × 2 types = 60/60 successful deposits
-   - No concurrency issues between different wallets
-   - Proper share distribution per wallet
-
-3. **APY Dynamic Changes**
-   - APY updates during operation work correctly
-   - Immediate redistribution based on new APY values
-   - Multiple APY changes handled smoothly
-
-4. **Per-Block Security Limits**
-   - Same wallet cannot deposit twice in same block ✅
-   - Different wallets can deposit in same block ✅
-   - Protection works for both WKAIA and native KAIA ✅
-
-5. **LST Integration**
-   - All 4 LSTs receive correct stake amounts
-   - Proper use of `stake()` function instead of `deposit()`
-   - Balance verification before operations
-
-### Run Integration Tests
+### Run Integrated Test Suite
 ```bash
-# Full integration test (comprehensive)
-npx hardhat run scripts/tests/fullIntegrationTest.js --network kairos
+# Complete test suite including deposits, withdrawals, and concurrent operations
+npm run test:testnet            # Test on Kairos testnet
+npm run test:mainnet            # Test on Kaia mainnet
 
-# Individual feature tests
-npx hardhat run scripts/tests/testMultiWalletDeposits.js --network kairos
-npx hardhat run scripts/tests/testAPYChangeSimple.js --network kairos
-npx hardhat run scripts/tests/testPerBlockLimit.js --network kairos
-npx hardhat run scripts/tests/testNativeKAIADeposit.js --network kairos
+# Or directly with hardhat
+npx hardhat run scripts/testIntegrated.js --network kairos
 ```
+
+### Test Coverage
+The integrated test suite covers:
+
+1. **Deposit Tests**
+   - Large deposit for liquidity buffer (3 KAIA)
+   - Small user deposits (0.1 KAIA)
+   - Native KAIA and WKAIA deposits
+   - Share minting verification
+
+2. **Withdrawal Tests**
+   - 100% withdrawal (most common user action)
+   - GIVEN_OUT swap execution
+   - Gas usage optimization
+
+3. **Concurrent Operations**
+   - Multiple simultaneous deposits
+   - Concurrent withdrawals
+   - Race condition handling
+
+### Known Issues & Solutions
+
+#### Withdrawal Threshold Issue
+- **Problem**: Withdrawals may fail when total deposits are small
+- **Root Cause**: 10% slippage buffer in swap logic creates mathematical impossibility with small LST balances
+- **Solution**: 
+  - Provide 3 KAIA initial liquidity buffer
+  - Issue resolves naturally as more users join
+- **Details**: See CLAUDE.md for complete mathematical analysis
 
 ## Key Features
 
 ### For Users
 - **Deposit**: Native KAIA or WKAIA deposits
 - **Withdraw**: Receive WKAIA by burning shares
+- **Unstake/Claim**: Unstake LSTs and claim after 7 days for asset realization
 - **Auto-distribution**: Deposits automatically distributed to highest APY protocols
 - **ERC-4626 Compliant**: Standard vault interface
 
@@ -147,27 +164,36 @@ npx hardhat run scripts/tests/testNativeKAIADeposit.js --network kairos
 
 ```
 scripts/
-├── deploy.js                    # V1 deployment (DO NOT MODIFY)
-├── upgrade.js                   # V1 upgrade (DO NOT MODIFY)
-├── deploySeparatedVault.js     # Deploy ShareVault + VaultCore
-├── upgradeSeparatedVault.js    # Upgrade separated vault
-├── setupSeparatedVault.js      # Configure vault parameters
-├── testSeparatedVault.js       # Integration tests
-├── deploySwapContract.js       # Deploy SwapContract
-├── setAPY.js                    # Set APY values
-└── tests/                       # All test and debug scripts
-    ├── testSwapContractDirect.js  # Direct SwapContract testing
-    └── old/                     # Deprecated scripts
+├── deployFresh.js              # Complete fresh deployment (V2)
+├── upgradeVaultCore.js         # Upgrade VaultCore individually
+├── upgradeShareVault.js        # Upgrade ShareVault individually  
+├── upgradeSwapContract.js      # Deploy new SwapContract
+├── deployClaimManager.js       # Deploy ClaimManager (first time)
+├── upgradeClaimManager.js      # Upgrade ClaimManager
+├── upgradeContracts.js         # Combined upgrade script with options
+├── upgradeAll.js               # Upgrade all contracts
+├── setAPY.js                   # Configure APY values
+├── testIntegrated.js           # Integrated test suite
+├── deploySeparatedVault.js    # Legacy V2 deployment
+├── deploy.js                   # V1 deployment (DO NOT MODIFY)
+├── upgrade.js                  # V1 upgrade (DO NOT MODIFY)
+└── temp/                       # Temporary test scripts
 ```
 
 ## APY Management
 
 ### Set APY Values
-```javascript
-// Using setAPY.js script
-npx hardhat run scripts/setAPY.js --network kairos
+```bash
+# Using npm scripts
+npm run setup:testnet           # Configure APY on Kairos
+npm run setup:mainnet           # Configure APY on Kaia
 
-// Or programmatically
+# Or directly
+npx hardhat run scripts/setAPY.js --network kairos
+```
+
+#### Programmatic APY Update
+```javascript
 const vaultCore = await ethers.getContractAt("VaultCore", vaultCoreAddress);
 await vaultCore.setAPY(0, 5000); // 5% for wKoKAIA
 await vaultCore.setAPY(1, 6000); // 6% for wGCKAIA
@@ -213,17 +239,22 @@ stKAIA: 0x45886b01276c45Fe337d3758b94DD8D7F3951d97
 
 ### Compile Contracts
 ```bash
-npx hardhat compile
+npm run compile
 ```
 
 ### Check Contract Sizes
 ```bash
-npx hardhat size-contracts
+npm run size
 ```
 
 ### Run Unit Tests
 ```bash
-npx hardhat test
+npm test
+```
+
+### Code Formatting
+```bash
+npm run prettier                # Format all Solidity files
 ```
 
 ## Important Notes
