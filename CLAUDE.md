@@ -428,9 +428,16 @@ await vaultCore.setAPY(0, 5000)  // Focus on most liquid LST
 **⚠️ IMPORTANT: WKAIA deposits now use Direct Deposit pattern to avoid state sync issues**
 
 #### Background:
-- **Issue**: WKAIA state synchronization problems between contracts causing "WETH: request exceeds allowance" errors
-- **Root Cause**: Complex transaction chain (User → ShareVault → VaultCore → WKAIA.withdraw) amplifies state sync issues
+- **Initial Wrong Assumption**: We thought it was WKAIA contract issue, KAIA chain issue, or RPC sync delay
+- **Real Root Cause**: OUR LOGIC was the problem - Complex transaction chain (User → ShareVault → VaultCore → WKAIA.withdraw) 
+- **Lesson Learned**: Always look for problems in our own code first, not external systems
 - **Solution**: Direct Deposit pattern - User transfers WKAIA directly to VaultCore first
+
+#### 🎓 Key Lessons from This Issue:
+1. **Look Internal First**: Problems are usually in our own logic, not external systems
+2. **Find Root Cause**: Don't use workarounds without understanding the real problem
+3. **Avoid Assumptions**: We wasted time assuming it was chain/RPC issues when it was our code
+4. **Simple Solutions Win**: Direct transfer pattern is simpler and more reliable
 
 #### How Direct Deposit Works:
 ```javascript
@@ -461,6 +468,32 @@ await shareVault.deposit(amount, receiver);
 #### Upgrade Scripts Updated:
 - All VaultCore upgrade scripts now include `{ unsafeAllow: ['delegatecall'] }`
 - Prevents "Contract is not upgrade safe" errors due to ClaimManager delegatecall
+
+### 📌 Per-Block Limit Review Reminder (2025-08-16)
+
+**Current Status**: Per-block limit KEPT for spam prevention
+```solidity
+require(block.number > lastDepositBlock[msg.sender], "Same block");
+```
+
+**Why it was added**: To reduce "request exceeds allowance" errors (before Direct Deposit)
+
+**Current situation**:
+- **Technically unnecessary**: Direct Deposit eliminated the original problem
+- **Kept for security**: Prevents spam/DoS attacks, provides rate limiting
+- **UX impact**: Minimal (users rarely need multiple deposits per block)
+
+**Future Review Checklist**:
+- [ ] Monitor mainnet usage patterns for multi-deposit needs
+- [ ] Check if spam/DoS concerns are real or theoretical
+- [ ] Consider relaxing to 2-3 deposits per block instead of complete removal
+- [ ] Evaluate if VIP users need exemption
+- [ ] Review after 3-6 months of mainnet operation
+
+**Test Results**:
+- With Direct Deposit: 0% error rate (vs 76% before)
+- Same-block attempts: Still blocked by per-block limit
+- Recommendation: Keep for now, review later
 
 ## Session History
 - Initial V1: Single contract (KommuneVault)

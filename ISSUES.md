@@ -45,47 +45,45 @@ Create test script at: `scripts/tests/testUnstakeClaim.js`
 
 ---
 
-### 2. WKAIA Deposit WETH Error
-**Priority**: HIGH  
-**Status**: 🔍 Investigation Required  
+### 2. ~~WKAIA Deposit WETH Error~~ ✅ RESOLVED (2025-08-16)
+**Priority**: ~~HIGH~~  
+**Status**: ✅ RESOLVED with Direct Deposit Pattern  
 **Assignee**: TBD  
 
-#### Description
-Intermittent error message mentioning "WETH" during WKAIA deposit operations. Error occurs sporadically and is not consistently reproducible.
+#### Original Issue
+"WETH: request exceeds allowance" error occurring during WKAIA deposit operations with 76% failure rate.
 
-#### Error Details
+#### Root Cause Found ✅
+**NOT external system issue** - The problem was in OUR LOGIC:
+- Complex transaction chain: User → ShareVault → VaultCore → WKAIA.withdraw()
+- ShareVault transferred WKAIA to VaultCore then immediately called withdraw
+- This rapid state change caused synchronization issues
+
+#### Solution Implemented ✅
+**Direct Deposit Pattern**:
+```javascript
+// Step 1: User transfers WKAIA directly to VaultCore
+await wkaia.transfer(vaultCore, amount);
+// Step 2: User calls deposit on ShareVault
+await shareVault.deposit(amount, receiver);
 ```
-Error: WETH [specific error message needed]
-```
 
-#### Potential Causes
-1. **Interface Confusion**
-   - WKAIA might be using IWETH9 interface
-   - Check if WKAIA inherits from WETH standard
-   - Verify interface compatibility
+#### Results
+- **Before**: 76% error rate with old pattern
+- **After**: 0% error rate with Direct Deposit
+- **Complete elimination of the problem**
 
-2. **Import Issues**
-   - Check for WETH imports in contracts
-   - Verify no accidental WETH references
+#### 🎓 Lessons Learned
+1. **Look Internal First**: We wasted time blaming WKAIA/Chain/RPC when it was our code
+2. **Find Root Cause**: Don't apply workarounds without understanding the real problem
+3. **Simple is Better**: Direct transfer is simpler and more reliable
+4. **Test Thoroughly**: Proper testing revealed the real issue
 
-3. **Library Dependencies**
-   - Review OpenZeppelin imports
-   - Check for WETH dependencies
-
-#### Investigation Steps
-- [ ] Search all contracts for "WETH" references
-- [ ] Check WKAIA interface implementation
-- [ ] Review deposit function call stack
-- [ ] Add detailed error logging
-- [ ] Create reproducible test case
-- [ ] Implement fix
-- [ ] Add regression tests
-
-#### Files to Check
-- `src/ShareVault.sol`
-- `src/VaultCore.sol`
-- `src/interfaces/IWKAIA.sol` (if exists)
-- Any imported OpenZeppelin contracts
+#### Implementation Files
+- ✅ `src/ShareVault.sol` - Updated deposit() and mint()
+- ✅ `src/VaultCore.sol` - Added handleDirectDeposit()
+- ✅ All upgrade scripts updated with unsafeAllow
+- ✅ Integration tests passing 100%
 
 ---
 
