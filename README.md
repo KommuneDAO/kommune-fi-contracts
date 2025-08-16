@@ -76,14 +76,29 @@ npm run deploy:v1:testnet       # V1 deployment (deprecated)
 npm run upgrade:v1:testnet      # V1 upgrade (deprecated)
 ```
 
+## Direct Deposit Pattern (Important Update - 2025-08-16)
+
+### WKAIA Deposits
+Due to state synchronization issues, WKAIA deposits now use a Direct Deposit pattern:
+
+```javascript
+// Step 1: Transfer WKAIA directly to VaultCore
+await wkaia.transfer(vaultCore, amount);
+
+// Step 2: Call deposit on ShareVault
+await shareVault.deposit(amount, receiver);
+```
+
+**Note**: Native KAIA deposits continue to use `depositKAIA()` as before.
+
 ## Current Deployment (Kairos Testnet)
 
 ### Separated Architecture (V2) - Latest
 | Contract | Address | Size |
 |----------|---------|------|
-| ShareVault | 0xfd2853D33733fC841248838525824fC7828441cb | 12.23 KB |
-| VaultCore | 0x42Ec587DEb0EDe5296b507591EbB84140D2280F2 | 10.17 KB |
-| SwapContract | 0x829718DBf5e19AB36ab305ac7A7c6C9995bB5F15 | 9.26 KB |
+| ShareVault | 0x2fEF94324DF0579A804464F270A0b9BF025Cf4B7 | 12.23 KB |
+| VaultCore | 0x6eCdC06fDc31f9B05a096805d940E94E8a9Df6E2 | 10.17 KB |
+| SwapContract | 0x4FeBBa8B6AE01181373B6d965888D72F99c0416f | 9.26 KB |
 
 ### Previous Deployments
 - **KVaultV2**: 0xfBF698074Cc9D6496c22faa117616E2038551424 (23.99 KB - at size limit)

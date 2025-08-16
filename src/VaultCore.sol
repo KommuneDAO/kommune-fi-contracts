@@ -44,6 +44,7 @@ contract VaultCore is OwnableUpgradeable, UUPSUpgradeable {
     event KAIADeposited(uint256 amount);
     event StakeExecuted(uint256 amount);
     event SwapExecuted(uint256 index, uint256 amountIn, uint256 amountOut);
+    event DirectDepositFrom(address indexed depositor, uint256 amount);
     
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -210,12 +211,16 @@ contract VaultCore is OwnableUpgradeable, UUPSUpgradeable {
     }
     
     /**
-     * @dev Handle deposit from ShareVault
+     * @dev Handle direct deposit where WKAIA is already in VaultCore
+     * This avoids the ShareVault -> VaultCore transfer and state sync issues
+     * @param amount Amount of WKAIA already received
+     * @param depositor The address of the original depositor
      */
-    function handleDeposit(uint256 amount) external returns (bool) {
+    function handleDirectDeposit(uint256 amount, address depositor) public returns (bool) {
         require(msg.sender == shareVault, "Only ShareVault");
+        require(amount > 0, "Zero amount");
         
-        // Check WKAIA balance
+        // WKAIA is already here, just verify balance
         uint256 wkaiaBalance = IERC20(wkaia).balanceOf(address(this));
         require(wkaiaBalance >= amount, "Insufficient WKAIA");
         
@@ -223,23 +228,8 @@ contract VaultCore is OwnableUpgradeable, UUPSUpgradeable {
         uint256 amountToStake = (amount * investRatio) / 10000;
         
         if (amountToStake > 0) {
-            // Ensure we have enough WKAIA to withdraw
+            // Direct balance check - no transfer just happened, state should be stable
             require(wkaiaBalance >= amountToStake, "Insufficient WKAIA for stake");
-            
-            // Simple state synchronization for WKAIA
-            // Perform 3 attempts to read the balance
-            uint256 finalBalance = 0;
-            for (uint i = 0; i < 3; i++) {
-                finalBalance = IERC20(wkaia).balanceOf(address(this));
-                IERC20(wkaia).totalSupply();
-            }
-
-            
-            // If insufficient balance after 3 reads, revert explicitly
-            require(
-                finalBalance >= amountToStake, 
-                "Insufficient WKAIA balance for staking"
-            );
             
             // Unwrap WKAIA to KAIA for staking
             IWKaia(wkaia).withdraw(amountToStake);
@@ -251,7 +241,18 @@ contract VaultCore is OwnableUpgradeable, UUPSUpgradeable {
         }
         
         emit AssetsDeposited(amount);
+        emit DirectDepositFrom(depositor, amount);
         return true;
+    }
+    
+    /**
+     * @dev Handle deposit from ShareVault (deprecated - use handleDirectDeposit)
+     * Kept for backward compatibility but redirects to handleDirectDeposit
+     */
+    function handleDeposit(uint256 amount) external returns (bool) {
+        require(msg.sender == shareVault, "Only ShareVault");
+        // Redirect to handleDirectDeposit with msg.sender as depositor
+        return handleDirectDeposit(amount, msg.sender);
     }
     
     /**

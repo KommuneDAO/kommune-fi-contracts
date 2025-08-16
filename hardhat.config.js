@@ -53,12 +53,17 @@ module.exports = {
       url: "https://klaytn-en.kommunedao.xyz:8651",
       chainId: 8217,
       accounts: [KAIA_PRIVATE_KEY],
+      timeout: 600000, // 10 minutes
     },
     kairos: {
-      url: "https://responsive-green-emerald.kaia-kairos.quiknode.pro",
-      // url: "https://public-en-kairos.node.kaia.io",
+      // url: "https://responsive-green-emerald.kaia-kairos.quiknode.pro", // QuickNode - rate limited
+      url: "https://public-en-kairos.node.kaia.io", // Official Kairos RPC
       chainId: 1001,
       accounts: [KAIROS_PRIVATE_KEY],
+      timeout: 600000, // 10 minutes
     },
+  },
+  mocha: {
+    timeout: 600000, // 10 minutes for test timeout
   },
 };

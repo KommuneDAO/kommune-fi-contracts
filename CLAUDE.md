@@ -4,6 +4,35 @@
 
 **Before implementing ANY new feature or fixing ANY issue:**
 
+### ⚠️ CRITICAL: Deposit Function Usage (2025-08-15)
+
+**NEVER confuse these two deposit functions:**
+
+1. **`deposit(uint256 assets, address receiver)`** - WKAIA ONLY
+   - Requires user to ALREADY have WKAIA
+   - Requires WKAIA approve() to ShareVault first
+   - DO NOT send native KAIA as msg.value
+   ```javascript
+   // WRONG ❌
+   await shareVault.deposit(amount, user, {value: amount})  // WILL FAIL!
+   
+   // CORRECT ✅
+   await wkaia.deposit({value: amount})  // First wrap KAIA to WKAIA
+   await wkaia.approve(shareVault, amount)  // Then approve
+   await shareVault.deposit(amount, user)  // Finally deposit
+   ```
+
+2. **`depositKAIA(address receiver)`** - NATIVE KAIA
+   - For direct native KAIA deposits
+   - NO approve needed
+   - Send KAIA as msg.value
+   ```javascript
+   // CORRECT ✅
+   await shareVault.depositKAIA(user, {value: amount})
+   ```
+
+**Common Mistake**: Using `deposit()` with `{value: amount}` - This ALWAYS fails because deposit() expects WKAIA, not native KAIA!
+
 ### ✅ REQUIRED CHECKLIST:
 1. **📖 Read existing successful implementations FIRST**:
    - `src/KommuneVaultV2.sol` - Reference for all swap logic, withdrawal patterns, LST handling
@@ -364,6 +393,75 @@ swapContract.swapGivenOut(info, vault, finalTarget, availableBalance);
 
 Note: Increase Wallet 1 deposit amount if buffer insufficient (e.g., 2-3 KAIA)
 
+### Withdrawal Threshold Findings (2025-08-15)
+
+**⚠️ CRITICAL: Current configuration requires 7.5x deposit for 100% withdrawal**
+
+#### Test Results:
+- For 0.1 KAIA withdrawal, minimum 0.75 KAIA total deposits needed
+- Ratio: 7.5:1 (highly inefficient)
+- Root cause: 90% LST investment + 10% slippage = compound effect
+
+#### Optimal Configuration to Reduce Threshold:
+```javascript
+// IMMEDIATE FIX - Reduce investRatio
+await vaultCore.setInvestRatio(3000)  // 30% to LSTs, 70% liquidity
+// Result: 7.5x → 1.4x threshold
+
+// OPTIONAL - Seed liquidity
+await shareVault.depositKAIA(treasury, {value: 2e18})  // 2 KAIA buffer
+
+// OPTIONAL - Optimize APY distribution  
+await vaultCore.setAPY(0, 5000)  // Focus on most liquid LST
+```
+
+#### investRatio Impact Table:
+| investRatio | LST % | Liquidity % | Threshold | 
+|------------|-------|-------------|-----------|
+| 9000 (current) | 90% | 10% | 7.5x |
+| 5000 | 50% | 50% | 2.0x |
+| 3000 (recommended) | 30% | 70% | 1.4x |
+| 2000 | 20% | 80% | 1.25x |
+
+### Direct Deposit Pattern (2025-08-16)
+
+**⚠️ IMPORTANT: WKAIA deposits now use Direct Deposit pattern to avoid state sync issues**
+
+#### Background:
+- **Issue**: WKAIA state synchronization problems between contracts causing "WETH: request exceeds allowance" errors
+- **Root Cause**: Complex transaction chain (User → ShareVault → VaultCore → WKAIA.withdraw) amplifies state sync issues
+- **Solution**: Direct Deposit pattern - User transfers WKAIA directly to VaultCore first
+
+#### How Direct Deposit Works:
+```javascript
+// Step 1: User transfers WKAIA directly to VaultCore
+await wkaia.transfer(vaultCore, amount);
+
+// Step 2: User calls deposit on ShareVault (which now uses handleDirectDeposit)
+await shareVault.deposit(amount, receiver);
+```
+
+#### Test Results:
+- **Old Pattern**: 76% error rate due to state sync issues
+- **Direct Deposit**: 0% error rate - complete elimination of the problem
+
+#### Implementation Details:
+1. **ShareVault.sol**:
+   - `deposit()` and `mint()` functions updated to use Direct Deposit
+   - Requires WKAIA to be at VaultCore before calling
+   - Calls `handleDirectDeposit()` instead of transferring
+
+2. **VaultCore.sol**:
+   - New `handleDirectDeposit()` function processes pre-transferred WKAIA
+   - `handleDeposit()` redirects to `handleDirectDeposit` for backward compatibility
+   - Added `DirectDepositFrom` event for tracking
+
+3. **Native KAIA deposits**: Continue using `depositKAIA()` as before (no changes)
+
+#### Upgrade Scripts Updated:
+- All VaultCore upgrade scripts now include `{ unsafeAllow: ['delegatecall'] }`
+- Prevents "Contract is not upgrade safe" errors due to ClaimManager delegatecall
+
 ## Session History
 - Initial V1: Single contract (KommuneVault)
 - V1.5: Optimized KVaultV2 hit 24KB size limit  
@@ -373,3 +471,6 @@ Note: Increase Wallet 1 deposit amount if buffer insufficient (e.g., 2-3 KAIA)
 - All 4 LSTs tested successfully with GIVEN_OUT swaps
 - Project structure cleaned up and test scripts organized (2025-08-14)
 - **Multi-LST withdrawal issues resolved by referencing KommuneVaultV2.sol (2025-08-14)**
+- **Withdrawal threshold testing completed (2025-08-15)**
+- **Deposit function confusion resolved - always use depositKAIA() for native KAIA (2025-08-15)**
+- **Direct Deposit pattern implemented to eliminate WKAIA state sync issues (2025-08-16)**

@@ -31,6 +31,19 @@ async function main() {
     const vaultCore = await ethers.getContractAt("VaultCore", deployments.vaultCore);
     const wkaia = await ethers.getContractAt("IERC20", deployments.wkaia);
     
+    // WKAIA contract with full ABI for Direct Deposit
+    const wkaiaContract = new ethers.Contract(
+        deployments.wkaia,
+        [
+            "function deposit() payable",
+            "function withdraw(uint256) external",
+            "function balanceOf(address) view returns (uint256)",
+            "function approve(address,uint256) returns (bool)",
+            "function transfer(address,uint256) returns (bool)"
+        ],
+        provider
+    );
+    
     // Test results tracking
     const results = {
         deposits: { passed: 0, failed: 0 },
@@ -94,8 +107,39 @@ async function main() {
     
     await new Promise(r => setTimeout(r, 3000));
     
-    // Test 1.3: Check vault state
-    console.log("\n📝 Test 1.3: Vault State Verification");
+    // Test 1.3: WKAIA Direct Deposit
+    console.log("\n📝 Test 1.3: WKAIA Direct Deposit");
+    console.log("  Purpose: Test Direct Deposit pattern to avoid state sync issues");
+    
+    try {
+        // First wrap some KAIA to WKAIA
+        const wrapAmount = ethers.parseEther("0.1");
+        const wrapTx = await wkaiaContract.connect(wallet3).deposit({ value: wrapAmount });
+        await wrapTx.wait();
+        console.log(`  ✓ Wallet 3 wrapped 0.1 KAIA to WKAIA`);
+        
+        // Step 1: Transfer WKAIA directly to VaultCore (Direct Deposit pattern)
+        const transferTx = await wkaiaContract.connect(wallet3).transfer(deployments.vaultCore, wrapAmount);
+        await transferTx.wait();
+        console.log(`  ✓ WKAIA transferred directly to VaultCore`);
+        
+        // Step 2: Call deposit on ShareVault (which now uses handleDirectDeposit)
+        const depositTx = await shareVault.connect(wallet3).deposit(wrapAmount, wallet3.address);
+        await depositTx.wait();
+        
+        const shares = await shareVault.balanceOf(wallet3.address);
+        console.log(`  ✅ Wallet 3 deposited 0.1 WKAIA via Direct Deposit`);
+        console.log(`     Shares received: ${ethers.formatEther(shares)}`);
+        results.deposits.passed++;
+    } catch (error) {
+        console.log(`  ❌ Failed: ${error.message}`);
+        results.deposits.failed++;
+    }
+    
+    await new Promise(r => setTimeout(r, 3000));
+    
+    // Test 1.4: Check vault state
+    console.log("\n📝 Test 1.4: Vault State Verification");
     
     const totalAssets = await shareVault.totalAssets();
     const totalSupply = await shareVault.totalSupply();

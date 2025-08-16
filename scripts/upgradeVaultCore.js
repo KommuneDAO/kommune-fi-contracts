@@ -35,8 +35,12 @@ async function main() {
             console.log("  ✓ 프록시 이미 등록됨");
         }
         
-        // Upgrade VaultCore
-        const vaultCore = await upgrades.upgradeProxy(deployments.vaultCore, VaultCore);
+        // Upgrade VaultCore with unsafeAllow for delegatecall
+        const vaultCore = await upgrades.upgradeProxy(
+            deployments.vaultCore, 
+            VaultCore,
+            { unsafeAllow: ['delegatecall'] }  // Allow delegatecall for ClaimManager
+        );
         await vaultCore.waitForDeployment();
         console.log("  ✅ VaultCore 업그레이드 성공");
     

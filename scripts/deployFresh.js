@@ -56,7 +56,8 @@ async function main() {
         ],
         { 
             initializer: "initialize",
-            kind: 'uups'
+            kind: 'uups',
+            unsafeAllow: ["delegatecall"]
         }
     );
     await vaultCore.waitForDeployment();

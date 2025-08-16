@@ -57,7 +57,11 @@ async function main() {
                 // Already imported
             }
             
-            const vaultCore = await upgrades.upgradeProxy(deployments.vaultCore, VaultCore);
+            const vaultCore = await upgrades.upgradeProxy(
+                deployments.vaultCore, 
+                VaultCore,
+                { unsafeAllow: ['delegatecall'] }  // Allow delegatecall for ClaimManager
+            );
             await vaultCore.waitForDeployment();
             console.log("  ✅ VaultCore upgraded successfully");
             
