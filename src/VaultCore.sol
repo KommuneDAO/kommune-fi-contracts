@@ -9,6 +9,8 @@ import {IWKaia} from "./interfaces/IWKaia.sol";
 import {TokenInfo} from "./interfaces/ITokenInfo.sol";
 import {SwapContract} from "./SwapContract.sol";
 import {IBalancerVault, IAsset} from "./interfaces/IBalancerVault.sol";
+import {IWrappedLST} from "./interfaces/IWrappedLST.sol";
+import {IKoKaia} from "./interfaces/IKoKaia.sol";
 
 /**
  * @title VaultCore
@@ -45,6 +47,7 @@ contract VaultCore is OwnableUpgradeable, UUPSUpgradeable {
     event StakeExecuted(uint256 amount);
     event SwapExecuted(uint256 index, uint256 amountIn, uint256 amountOut);
     event DirectDepositFrom(address indexed depositor, uint256 amount);
+    event WrappedUnstake(address indexed user, uint256 indexed lstIndex, uint256 amount);
     
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -468,31 +471,80 @@ contract VaultCore is OwnableUpgradeable, UUPSUpgradeable {
     }
     
     /**
+     * @dev Unwrap wrapped LST tokens (e.g., wKoKAIA to KoKAIA)
+     * Required before unstaking for some protocols
+     */
+    function unwrapLST(uint256 lstIndex, uint256 amount) external onlyOwner returns (uint256) {
+        require(lstIndex < 3, "Only for wrapped LSTs");
+        require(amount > 0, "Amount must be positive");
+        
+        TokenInfo memory info = tokensInfo[lstIndex];
+        uint256 wrappedBalance = IERC20(info.tokenA).balanceOf(address(this));
+        require(wrappedBalance >= amount, "Insufficient wrapped balance");
+        
+        // Use interface call instead of low-level call
+        // This properly handles the return value and success status
+        uint256 unwrappedAmount = IWrappedLST(info.tokenA).unwrap(amount);
+        
+        // Verify we received the KoKAIA/GcKAIA/stKLAY
+        require(unwrappedAmount > 0, "No tokens received from unwrap");
+        
+        return unwrappedAmount;
+    }
+    
+    /**
+     * @dev Unstake wrapped LST tokens (wKoKAIA, wGcKAIA, wstKLAY)
+     * For KoKAIA: Uses wKoKAIA directly without unwrapping
+     * For others: Uses delegatecall to ClaimManager
+     */
+    function unstakeWrapped(address user, uint256 lstIndex, uint256 amount) external onlyOwner {
+        require(lstIndex < 3, "Only for wrapped LSTs (0-2)");
+        require(amount > 0, "Amount must be positive");
+        require(user != address(0), "Invalid user");
+        
+        TokenInfo memory info = tokensInfo[lstIndex];
+        
+        // Check we have enough wrapped token balance
+        uint256 wrappedBalance = IERC20(info.tokenA).balanceOf(address(this));
+        require(wrappedBalance >= amount, "Insufficient wrapped token balance");
+        
+        if (lstIndex == 0) {
+            // For wKoKAIA: handler (KoKAIA contract) can process wKoKAIA unstake
+            // Approve handler to spend our wKoKAIA
+            IERC20(info.tokenA).approve(info.handler, amount);
+            
+            // Call unstake on KoKAIA handler with wKoKAIA approved
+            // The handler will handle wKoKAIA and create unstake request
+            IKoKaia(info.handler).unstake(amount);
+            
+            emit WrappedUnstake(user, lstIndex, amount);
+        } else {
+            // For wGcKAIA and wstKLAY, use ClaimManager
+            require(claimManager != address(0), "ClaimManager not set");
+            (bool success, ) = claimManager.delegatecall(
+                abi.encodeWithSignature("executeUnstakeWrapped(address,uint256,uint256)", user, lstIndex, amount)
+            );
+            require(success, "Wrapped unstake execution failed");
+        }
+    }
+    
+    /**
      * @dev Unstake LST tokens for future claim
-     * Requires 7 days waiting period before claim
-     * Uses delegatecall to ClaimManager to reduce contract size
+     * Requires 7 days waiting period before claim (10 min on testnet)
+     * All LST unstakes are handled through ClaimManager via delegatecall
      */
     function unstake(address user, uint256 lstIndex, uint256 amount) external onlyOwner {
-        require(claimManager != address(0), "ClaimManager not set");
         require(lstIndex < 4, "Invalid LST index");
         require(amount > 0, "Amount must be positive");
+        require(user != address(0), "Invalid user");
         
         // Ensure we have enough LST balance
         TokenInfo memory info = tokensInfo[lstIndex];
-        uint256 balance = lstIndex == 3 ? 
-            IERC20(info.asset).balanceOf(address(this)) :
-            IERC20(info.tokenA).balanceOf(address(this));
-        require(balance >= amount, "Insufficient LST balance");
+        uint256 balance = IERC20(info.asset).balanceOf(address(this));
+        require(balance >= amount, "Insufficient LST balance for unstake");
         
-        // Unwrap if needed (for non-stKAIA)
-        if (lstIndex < 3) {
-            (bool success,) = info.tokenA.call(
-                abi.encodeWithSignature("unwrap(uint256)", amount)
-            );
-            require(success, "Unwrap failed");
-        }
-        
-        // Execute unstake via delegatecall
+        // All LSTs including KoKAIA use ClaimManager via delegatecall
+        require(claimManager != address(0), "ClaimManager not set");
         (bool success, bytes memory data) = claimManager.delegatecall(
             abi.encodeWithSignature("executeUnstake(address,uint256,uint256)", user, lstIndex, amount)
         );

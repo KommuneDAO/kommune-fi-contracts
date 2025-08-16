@@ -469,6 +469,42 @@ await shareVault.deposit(amount, receiver);
 - All VaultCore upgrade scripts now include `{ unsafeAllow: ['delegatecall'] }`
 - Prevents "Contract is not upgrade safe" errors due to ClaimManager delegatecall
 
+### ClaimManager Storage Layout Resolution (2025-08-16)
+
+**⚠️ CRITICAL: ClaimManager storage layout must match VaultCore exactly for delegatecall**
+
+#### Problem Discovered:
+- **Initial Assumption**: Storage starts after OpenZeppelin gaps (slot 102)
+- **Reality**: VaultCore proxy storage starts at slot 0
+- **Impact**: tokensInfo mapping was reading wrong storage location
+
+#### Solution:
+```solidity
+// CORRECT ClaimManager storage layout
+contract ClaimManager {
+    // Slot 0-10 must match VaultCore exactly
+    address public shareVault;       // slot 0
+    address public wkaia;            // slot 1
+    address public balancerVault;    // slot 2
+    address public swapContract;     // slot 3
+    address public claimManager;     // slot 4
+    mapping(uint256 => TokenInfo) public tokensInfo;  // slot 5
+    // ... rest of storage
+}
+```
+
+#### Key Lessons:
+1. **Always check actual proxy storage** using `ethers.provider.getStorage()`
+2. **VaultCore doesn't use Ownable2Step** - only OwnableUpgradeable
+3. **Storage starts at slot 0** in the proxy, not after gaps
+4. **Delegatecall requires EXACT storage layout match**
+
+#### Test Results:
+- ✅ wKoKAIA unwrap to KoKAIA: Working
+- ✅ KoKAIA unstake via ClaimManager: Working
+- ✅ 10-minute wait and claim: Working
+- ✅ KAIA received in VaultCore: Confirmed
+
 ### 📌 Per-Block Limit Review Reminder (2025-08-16)
 
 **Current Status**: Per-block limit KEPT for spam prevention
@@ -507,3 +543,4 @@ require(block.number > lastDepositBlock[msg.sender], "Same block");
 - **Withdrawal threshold testing completed (2025-08-15)**
 - **Deposit function confusion resolved - always use depositKAIA() for native KAIA (2025-08-15)**
 - **Direct Deposit pattern implemented to eliminate WKAIA state sync issues (2025-08-16)**
+- **ClaimManager storage layout fixed - unstake/claim via delegatecall working (2025-08-16)**

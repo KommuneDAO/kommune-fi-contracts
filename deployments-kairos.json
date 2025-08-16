@@ -7,6 +7,10 @@
   "chainId": "1001",
   "network": "kairos",
   "deployedAt": "2025-08-14T23:40:57.967Z",
-  "lastVaultCoreUpgrade": "2025-08-16T01:58:10.798Z",
-  "lastShareVaultUpgrade": "2025-08-16T01:58:34.681Z"
+  "lastVaultCoreUpgrade": "2025-08-16T07:22:25.159Z",
+  "lastShareVaultUpgrade": "2025-08-16T01:58:34.681Z",
+  "claimManager": "0x01521D22f4B1e35a38C45e0B15CF9AF771294E64",
+  "claimManagerOld": "0x21929E0CC31889598Dc9754d05E52142efFdfb32",
+  "lastClaimManagerDeploy": "2025-08-16T08:14:00.000Z",
+  "note": "ClaimManager fixed with correct storage layout (slot 0 start)"
 }
