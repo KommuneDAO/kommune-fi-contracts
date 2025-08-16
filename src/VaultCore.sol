@@ -48,6 +48,7 @@ contract VaultCore is OwnableUpgradeable, UUPSUpgradeable {
     event SwapExecuted(uint256 index, uint256 amountIn, uint256 amountOut);
     event DirectDepositFrom(address indexed depositor, uint256 amount);
     event WrappedUnstake(address indexed user, uint256 indexed lstIndex, uint256 amount);
+    event Claimed(address indexed user, uint256 indexed lstIndex, uint256 amount);
     
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -555,7 +556,7 @@ contract VaultCore is OwnableUpgradeable, UUPSUpgradeable {
      * @dev Claim unstaked assets after 7 days
      * Uses delegatecall to ClaimManager
      */
-    function claim(address user, uint256 lstIndex) external returns (uint256) {
+    function claim(address user, uint256 lstIndex) external onlyOwner returns (uint256) {
         require(claimManager != address(0), "ClaimManager not set");
         require(lstIndex < 4, "Invalid LST index");
         
@@ -567,10 +568,11 @@ contract VaultCore is OwnableUpgradeable, UUPSUpgradeable {
         
         uint256 claimedAmount = abi.decode(data, (uint256));
         
-        // Wrap the claimed KAIA to WKAIA
+        // Wrap the claimed KAIA to WKAIA and keep it in VaultCore
         if (claimedAmount > 0 && address(this).balance >= claimedAmount) {
             IWKaia(wkaia).deposit{value: claimedAmount}();
-            IERC20(wkaia).safeTransfer(user, claimedAmount);
+            // WKAIA stays in VaultCore for protocol use
+            emit Claimed(user, lstIndex, claimedAmount);
         }
         
         return claimedAmount;

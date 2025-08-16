@@ -326,6 +326,8 @@ async function main() {
     console.log("📝 Test 4.1: KoKAIA Unstake via ClaimManager");
     console.log("  Purpose: Test delegatecall unstake through ClaimManager");
     
+    let unstakeAmount = ethers.parseEther("0.0005"); // Track unstake amount for later comparison
+    
     try {
         // Check ClaimManager
         const claimManagerAddress = await vaultCore.claimManager();
@@ -350,9 +352,8 @@ async function main() {
         const koKAIABalance = await koKAIA.balanceOf(vaultCore.target);
         console.log(`  KoKAIA balance: ${ethers.formatEther(koKAIABalance)}`);
         
-        if (koKAIABalance >= ethers.parseEther("0.0005")) {
+        if (koKAIABalance >= unstakeAmount) {
             // Perform unstake
-            const unstakeAmount = ethers.parseEther("0.0005");
             console.log(`  Unstaking ${ethers.formatEther(unstakeAmount)} KoKAIA...`);
             const unstakeTx = await vaultCore.connect(wallet1).unstake(wallet1.address, 0, unstakeAmount);
             await unstakeTx.wait();
@@ -361,10 +362,12 @@ async function main() {
             results.unstake.passed++;
         } else {
             console.log(`  ⚠️ Insufficient KoKAIA balance for unstake test`);
+            unstakeAmount = 0n; // Reset if we couldn't unstake
             results.unstake.passed++; // Count as passed since it's a balance issue
         }
     } catch (error) {
         console.log(`  ❌ Unstake failed: ${error.message}`);
+        unstakeAmount = 0n; // Reset if unstake failed
         results.unstake.failed++;
     }
     
@@ -413,75 +416,89 @@ async function main() {
     }
     
     // Test 4.3: Wait for Claim Period (10 minutes with countdown)
-    if (unstakeTimestamp > 0) {
-        console.log("\n📝 Test 4.3: Wait for Claim Period");
-        console.log("  Purpose: Wait 10 minutes for testnet claim period");
-        
-        const claimTime = unstakeTimestamp + 600; // 10 minutes for testnet
-        let currentTime = Math.floor(Date.now() / 1000);
-        let remaining = claimTime - currentTime;
-        
-        if (remaining > 0) {
-            console.log(`  ⏰ Waiting ${remaining} seconds for claim period...`);
-            console.log(`     (Will update every minute)`);
-            
-            // Wait with minute updates
-            while (remaining > 0) {
-                if (remaining >= 60) {
-                    // Wait 1 minute
-                    await new Promise(r => setTimeout(r, 60000));
-                    currentTime = Math.floor(Date.now() / 1000);
-                    remaining = claimTime - currentTime;
-                    if (remaining > 0) {
-                        const minutes = Math.floor(remaining / 60);
-                        const seconds = remaining % 60;
-                        console.log(`     ⏱️  ${minutes} minutes ${seconds} seconds remaining...`);
-                    }
-                } else {
-                    // Wait remaining seconds
-                    console.log(`     ⏱️  Less than 1 minute remaining (${remaining} seconds)...`);
-                    await new Promise(r => setTimeout(r, remaining * 1000));
-                    remaining = 0;
-                }
+    console.log("\n📝 Test 4.3: Wait for Claim Period");
+    console.log("  Purpose: Wait 10 minutes for testnet claim period");
+    
+    // Always wait 10 minutes regardless of previous unstake
+    console.log(`  ⏰ Waiting 10 minutes for claim period...`);
+    console.log(`     (Will update every minute)`);
+    
+    // Wait with minute updates
+    let remaining = 600; // Always wait full 10 minutes
+    while (remaining > 0) {
+        if (remaining >= 60) {
+            // Wait 1 minute
+            await new Promise(r => setTimeout(r, 60000));
+            remaining -= 60;
+            if (remaining > 0) {
+                const minutes = Math.floor(remaining / 60);
+                const seconds = remaining % 60;
+                console.log(`     ⏱️  ${minutes} minutes ${seconds} seconds remaining...`);
             }
-            console.log(`  ✅ Claim period complete!`);
         } else {
-            console.log(`  ✅ Claim period already passed`);
+            // Wait remaining seconds
+            console.log(`     ⏱️  Less than 1 minute remaining (${remaining} seconds)...`);
+            await new Promise(r => setTimeout(r, remaining * 1000));
+            remaining = 0;
+        }
+    }
+    console.log(`  ✅ Claim period complete!`);
+    
+    // Test 4.4: Perform Claim
+    console.log("\n📝 Test 4.4: Claim Unstaked KoKAIA");
+    console.log("  Purpose: Claim KAIA after unstake period");
+    
+    try {
+        // Check KAIA balance before claim
+        const kaiaBefore = await ethers.provider.getBalance(vaultCore.target);
+        console.log(`  VaultCore KAIA balance before claim: ${ethers.formatEther(kaiaBefore)}`);
+        
+        // Remind unstake amount
+        if (unstakeAmount > 0n) {
+            console.log(`  Unstaked KoKAIA amount: ${ethers.formatEther(unstakeAmount)}`);
         }
         
-        // Test 4.4: Perform Claim
-        console.log("\n📝 Test 4.4: Claim Unstaked KoKAIA");
-        console.log("  Purpose: Claim KAIA after unstake period");
+        // Perform claim
+        console.log(`  Claiming unstaked KoKAIA...`);
+        const claimTx = await vaultCore.connect(wallet1).claim(wallet1.address, 0);
+        await claimTx.wait();
         
-        try {
-            // Check KAIA balance before claim
-            const kaiaBefore = await ethers.provider.getBalance(vaultCore.target);
-            console.log(`  KAIA balance before: ${ethers.formatEther(kaiaBefore)}`);
+        // Check KAIA balance after claim
+        const kaiaAfter = await ethers.provider.getBalance(vaultCore.target);
+        const kaiaReceived = kaiaAfter - kaiaBefore;
+        
+        console.log(`  ✅ Claim successful!`);
+        console.log(`     KAIA received from claim: ${ethers.formatEther(kaiaReceived)}`);
+        console.log(`     VaultCore KAIA balance after claim: ${ethers.formatEther(kaiaAfter)}`);
+        
+        // Compare with unstaked KoKAIA amount
+        if (unstakeAmount > 0n) {
+            const ratio = (Number(kaiaReceived) / Number(unstakeAmount)) * 100;
+            console.log(`\n  📊 Conversion Analysis:`);
+            console.log(`     Unstaked: ${ethers.formatEther(unstakeAmount)} KoKAIA`);
+            console.log(`     Received: ${ethers.formatEther(kaiaReceived)} KAIA`);
+            console.log(`     Conversion ratio: ${ratio.toFixed(2)}% (KAIA/KoKAIA)`);
             
-            // Perform claim
-            console.log(`  Claiming unstaked KoKAIA...`);
-            const claimTx = await vaultCore.connect(wallet1).claim(wallet1.address, 0);
-            await claimTx.wait();
-            
-            // Check KAIA balance after claim
-            const kaiaAfter = await ethers.provider.getBalance(vaultCore.target);
-            const kaiaReceived = kaiaAfter - kaiaBefore;
-            
-            console.log(`  ✅ Claim successful!`);
-            console.log(`     KAIA received: ${ethers.formatEther(kaiaReceived)}`);
-            console.log(`     KAIA balance after: ${ethers.formatEther(kaiaAfter)}`);
-            results.unstake.passed++;
-            
-            // Verify unstake request is cleared
-            const valueAfterClaim = await ethers.provider.getStorage(vaultCore.target, finalSlot);
-            if (valueAfterClaim === "0x0000000000000000000000000000000000000000000000000000000000000000") {
-                console.log(`  ✅ Unstake request cleared from storage`);
+            if (ratio > 100) {
+                console.log(`     ✅ Received more KAIA than KoKAIA (staking rewards earned!)`);
+            } else if (ratio === 100) {
+                console.log(`     ➖ 1:1 conversion (no rewards yet)`);
+            } else {
+                console.log(`     ⚠️ Received less KAIA than KoKAIA (unusual - check pool status)`);
             }
-            
-        } catch (error) {
-            console.log(`  ❌ Claim failed: ${error.message}`);
-            results.unstake.failed++;
         }
+        
+        results.unstake.passed++;
+        
+        // Verify unstake request is cleared
+        const valueAfterClaim = await ethers.provider.getStorage(vaultCore.target, finalSlot);
+        if (valueAfterClaim === "0x0000000000000000000000000000000000000000000000000000000000000000") {
+            console.log(`  ✅ Unstake request cleared from storage`);
+        }
+        
+    } catch (error) {
+        console.log(`  ❌ Claim failed: ${error.message}`);
+        results.unstake.failed++;
     }
     
     // ═══════════════════════════════════════════════════════════════

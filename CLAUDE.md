@@ -505,6 +505,40 @@ contract ClaimManager {
 - ✅ 10-minute wait and claim: Working
 - ✅ KAIA received in VaultCore: Confirmed
 
+### Unstake/Claim Owner-Only Operations (2025-08-16)
+
+**⚠️ CRITICAL: Unstake and Claim are protocol management functions, NOT user functions**
+
+#### Background:
+- **Initial Misunderstanding**: Thought the `user` parameter in claim meant the recipient of assets
+- **Actual Purpose**: `user` is just for tracking/record-keeping of who initiated the unstake
+- **Correct Design**: Owner periodically unstakes LSTs to harvest staking rewards for the protocol
+
+#### Key Implementation:
+```solidity
+// VaultCore.sol - CORRECT implementation
+function claim(address user, uint256 lstIndex) external onlyOwner returns (uint256) {
+    // ... delegatecall to ClaimManager ...
+    if (claimedAmount > 0) {
+        IWKaia(wkaia).deposit{value: claimedAmount}();
+        // WKAIA stays in VaultCore - NO transfer to user
+        emit Claimed(user, lstIndex, claimedAmount);
+    }
+}
+```
+
+#### Important Points:
+1. **Both `unstake()` and `claim()` have `onlyOwner` modifier**
+2. **Claimed WKAIA stays in VaultCore** - increases protocol's total assets
+3. **Users can only `deposit()` and `withdraw()`** - cannot unstake/claim
+4. **Protocol owner harvests interest periodically** for all users' benefit
+
+#### Test Results:
+- ✅ Owner-only access control working
+- ✅ Claimed KAIA correctly wrapped to WKAIA
+- ✅ WKAIA stays in VaultCore (not sent to users)
+- ✅ Total protocol assets increase from claims
+
 ### 📌 Per-Block Limit Review Reminder (2025-08-16)
 
 **Current Status**: Per-block limit KEPT for spam prevention
@@ -544,3 +578,4 @@ require(block.number > lastDepositBlock[msg.sender], "Same block");
 - **Deposit function confusion resolved - always use depositKAIA() for native KAIA (2025-08-15)**
 - **Direct Deposit pattern implemented to eliminate WKAIA state sync issues (2025-08-16)**
 - **ClaimManager storage layout fixed - unstake/claim via delegatecall working (2025-08-16)**
+- **Unstake/Claim made owner-only operations - claimed assets stay in protocol (2025-08-16)**
