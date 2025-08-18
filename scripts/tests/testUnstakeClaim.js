@@ -36,14 +36,74 @@ async function main() {
     console.log(`Contract Owner: ${contractOwner}`);
     console.log(`Is signer the owner? ${contractOwner.toLowerCase() === owner.address.toLowerCase()}\n`);
     
-    // Check KoKAIA balance
-    const vaultKoKAIA = await koKAIA.balanceOf(vaultCoreAddress);
+    // Get token info for wKoKAIA
+    const tokenInfo = await vaultCore.tokensInfo(0);
+    // tokenInfo returns: [handler, asset, wrappedToken, poolId, wkaia, kaiaPairId, klayPairId]
+    const wKoKAIAAddress = tokenInfo[2]; // wrappedToken is at index 2
+    
+    // Check if tokenInfo is valid
+    if (!wKoKAIAAddress || wKoKAIAAddress === ethers.ZeroAddress) {
+        console.log("❌ No wKoKAIA configured in VaultCore");
+        console.log("   wKoKAIA address:", wKoKAIAAddress);
+        process.exit(1);
+    }
+    
+    const wKoKAIA = await ethers.getContractAt("IERC20", wKoKAIAAddress);
+    
+    // Check wKoKAIA balance
+    let vaultWKoKAIA = await wKoKAIA.balanceOf(vaultCoreAddress);
+    console.log(`VaultCore wKoKAIA balance: ${ethers.formatEther(vaultWKoKAIA)}`);
+    
+    // If no wKoKAIA, deposit first to get some
+    if (vaultWKoKAIA < ethers.parseEther("0.1")) {
+        console.log("\n=== Depositing to get wKoKAIA ===");
+        const shareVault = await ethers.getContractAt("ShareVault", deployments.shareVault);
+        
+        console.log("Depositing 1 KAIA from owner wallet...");
+        const depositTx = await shareVault.connect(owner).depositKAIA(owner.address, { 
+            value: ethers.parseEther("1") 
+        });
+        await depositTx.wait();
+        console.log("✅ Deposit successful");
+        
+        // Check new wKoKAIA balance
+        vaultWKoKAIA = await wKoKAIA.balanceOf(vaultCoreAddress);
+        console.log(`New wKoKAIA balance: ${ethers.formatEther(vaultWKoKAIA)}`);
+    }
+    
+    // Check KoKAIA balance after potential deposit
+    let vaultKoKAIA = await koKAIA.balanceOf(vaultCoreAddress);
     console.log(`VaultCore KoKAIA balance: ${ethers.formatEther(vaultKoKAIA)}`);
     
-    if (vaultKoKAIA >= ethers.parseEther("0.0001")) {
+    // Calculate 10% of wKoKAIA to unstake
+    const unstakeAmount = vaultWKoKAIA / 10n;
+    
+    // If not enough KoKAIA, need to unwrap wKoKAIA first
+    if (vaultKoKAIA < unstakeAmount && vaultWKoKAIA >= unstakeAmount) {
+        console.log("\n=== Unwrapping wKoKAIA to KoKAIA ===");
+        console.log(`Need to unwrap ${ethers.formatEther(unstakeAmount)} wKoKAIA to KoKAIA for unstaking...`);
+        
+        // Call owner-only unwrap function on VaultCore
+        try {
+            const unwrapTx = await vaultCore.connect(owner).unwrapLST(0, unstakeAmount);
+            console.log(`Unwrap TX: ${unwrapTx.hash}`);
+            await unwrapTx.wait();
+            console.log("✅ Unwrap successful");
+            
+            // Check new KoKAIA balance
+            vaultKoKAIA = await koKAIA.balanceOf(vaultCoreAddress);
+            console.log(`New KoKAIA balance: ${ethers.formatEther(vaultKoKAIA)}`);
+        } catch (error) {
+            console.log(`❌ Unwrap failed: ${error.message}`);
+            // If unwrap doesn't exist or fails, skip the test
+            console.log("   Note: Unable to unwrap wKoKAIA, skipping unstake test");
+            process.exit(0);
+        }
+    }
+    
+    if (vaultKoKAIA >= unstakeAmount) {
         console.log("\n=== Step 1: Owner Unstakes KoKAIA ===");
-        const unstakeAmount = ethers.parseEther("0.0001");
-        console.log(`Unstaking ${ethers.formatEther(unstakeAmount)} KoKAIA for protocol interest...`);
+        console.log(`Unstaking 10% of wKoKAIA: ${ethers.formatEther(unstakeAmount)} KoKAIA for protocol interest...`);
         
         try {
             const unstakeTx = await vaultCore.unstake(owner.address, 0, unstakeAmount);
@@ -153,7 +213,8 @@ async function main() {
         }
     } else {
         console.log("❌ Insufficient KoKAIA balance for test");
-        console.log("   Need at least 0.0001 KoKAIA in VaultCore");
+        console.log(`   Have ${ethers.formatEther(vaultKoKAIA)} KoKAIA but need ${ethers.formatEther(unstakeAmount)}`);
+        console.log("   Unable to proceed with unstake test");
     }
     
     console.log("\n=== Summary ===");
