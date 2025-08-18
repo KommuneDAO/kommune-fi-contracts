@@ -1,11 +1,11 @@
 {
-  "claimManager": "0x0E4A014564caA6610260054A73f11DF1167aC265",
-  "swapContract": "0x05fC200A7eaCDeECe7BBcBf6d672E12a65F800DC",
-  "vaultCore": "0xe89197c395De50eC62CfE1dE841ea088c1bD810b",
-  "shareVault": "0x86a4bDf145004DF36F0121140a034879cFAE8B2c",
+  "claimManager": "0x4bECEABFfD764212Ed9F66F8cA671D01A430f540",
+  "swapContract": "0xDd44CbA11903eB83e8d0f9e41b4d114fA45818d8",
+  "vaultCore": "0x84591428Fc67cff1337b5Db1D62abE1378a20415",
+  "shareVault": "0xB589753637000106c98FdaBb409144cE8aebC7Ed",
   "wkaia": "0x0339d5Eb6D195Ba90B13ed1BCeAa97EbD198b106",
   "balancerVault": "0x1c9074AA147648567015287B0d4185Cb4E04F86d",
   "chainId": "1001",
   "network": "kairos",
-  "deployedAt": "2025-08-18T06:59:24.595Z"
+  "deployedAt": "2025-08-18T07:54:43.588Z"
 }

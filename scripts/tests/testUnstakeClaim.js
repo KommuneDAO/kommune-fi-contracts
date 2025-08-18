@@ -55,13 +55,13 @@ async function main() {
     console.log(`VaultCore wKoKAIA balance: ${ethers.formatEther(vaultWKoKAIA)}`);
     
     // If no wKoKAIA, deposit first to get some
-    if (vaultWKoKAIA < ethers.parseEther("0.1")) {
+    if (vaultWKoKAIA < ethers.parseEther("0.01")) {
         console.log("\n=== Depositing to get wKoKAIA ===");
         const shareVault = await ethers.getContractAt("ShareVault", deployments.shareVault);
         
-        console.log("Depositing 1 KAIA from owner wallet...");
+        console.log("Depositing 0.1 KAIA from owner wallet...");
         const depositTx = await shareVault.connect(owner).depositKAIA(owner.address, { 
-            value: ethers.parseEther("1") 
+            value: ethers.parseEther("0.1") 
         });
         await depositTx.wait();
         console.log("✅ Deposit successful");
@@ -101,7 +101,7 @@ async function main() {
         }
     }
     
-    if (vaultKoKAIA >= unstakeAmount) {
+    if (vaultKoKAIA >= unstakeAmount || vaultWKoKAIA >= unstakeAmount) {
         console.log("\n=== Step 1: Owner Unstakes KoKAIA ===");
         console.log(`Unstaking 10% of wKoKAIA: ${ethers.formatEther(unstakeAmount)} KoKAIA for protocol interest...`);
         

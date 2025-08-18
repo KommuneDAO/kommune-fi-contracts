@@ -37,9 +37,9 @@ async function main() {
     console.log("");
     
     console.log("👛 Test Wallets:");
-    console.log("  Wallet 1:", wallet1.address, "(1 KAIA deposit)");
-    console.log("  Wallet 2:", wallet2.address, "(1 WKAIA deposit)");
-    console.log("  Wallet 3:", wallet3.address, "(0.2 KAIA + withdraw test)");
+    console.log("  Wallet 1:", wallet1.address, "(0.1 KAIA deposit)");
+    console.log("  Wallet 2:", wallet2.address, "(0.1 WKAIA deposit)");
+    console.log("  Wallet 3:", wallet3.address, "(0.05 KAIA + withdraw test)");
     console.log("");
     
     console.log("📊 Initial Settings:");
@@ -72,16 +72,16 @@ async function main() {
     console.log("║              DEPOSIT TESTS                                  ║");
     console.log("╚══════════════════════════════════════════════════════════════╝\n");
     
-    // Wallet 1: 1 KAIA deposit
-    console.log("📝 Test 1: Wallet 1 - 1 KAIA Deposit");
+    // Wallet 1: 0.1 KAIA deposit
+    console.log("📝 Test 1: Wallet 1 - 0.1 KAIA Deposit");
     try {
-        const depositAmount = ethers.parseEther("1");
+        const depositAmount = ethers.parseEther("0.1");
         const tx1 = await shareVault.connect(wallet1).depositKAIA(wallet1.address, { value: depositAmount });
         await tx1.wait();
         
         const shares1 = await shareVault.balanceOf(wallet1.address);
         console.log("  ✅ Success!");
-        console.log("     Amount: 1 KAIA");
+        console.log("     Amount: 0.1 KAIA");
         console.log("     Shares received:", ethers.formatEther(shares1));
     } catch (error) {
         console.log("  ❌ Failed:", error.message);
@@ -91,12 +91,12 @@ async function main() {
     console.log("\n⏳ Waiting for state sync (5 seconds)...");
     await new Promise(resolve => setTimeout(resolve, 5000));
     
-    // Wallet 2: 1 WKAIA deposit
-    console.log("\n📝 Test 2: Wallet 2 - 1 WKAIA Deposit (Standard ERC4626)");
+    // Wallet 2: 0.1 WKAIA deposit
+    console.log("\n📝 Test 2: Wallet 2 - 0.1 WKAIA Deposit (Standard ERC4626)");
     try {
         // Step 1: Wrap KAIA to WKAIA
-        console.log("  Step 1: Wrapping 1 KAIA to WKAIA...");
-        const wrapAmount = ethers.parseEther("1");
+        console.log("  Step 1: Wrapping 0.1 KAIA to WKAIA...");
+        const wrapAmount = ethers.parseEther("0.1");
         const wkaiaWallet2 = wkaia.connect(wallet2);
         const wrapTx = await wkaiaWallet2.deposit({ value: wrapAmount });
         await wrapTx.wait();
@@ -108,7 +108,7 @@ async function main() {
         console.log("  Step 2: Approving ShareVault...");
         const approveTx = await wkaiaWallet2.approve(deployments.shareVault, wrapAmount);
         await approveTx.wait();
-        console.log("  ✓ Approved 1 WKAIA");
+        console.log("  ✓ Approved 0.1 WKAIA");
         
         // Step 3: Deposit to ShareVault
         console.log("  Step 3: Depositing to ShareVault...");
@@ -118,7 +118,7 @@ async function main() {
         
         const shares2 = await shareVault.balanceOf(wallet2.address);
         console.log("  ✅ Success!");
-        console.log("     Amount: 1 WKAIA");
+        console.log("     Amount: 0.1 WKAIA");
         console.log("     Shares received:", ethers.formatEther(shares2));
     } catch (error) {
         console.log("  ❌ Failed:", error.message);
@@ -140,18 +140,18 @@ async function main() {
     console.log("⏳ Waiting for next block (3 seconds)...");
     await new Promise(resolve => setTimeout(resolve, 3000));
     
-    // Wallet 3: 0.2 KAIA deposit
-    console.log("\n📝 Step 1: Wallet 3 - 0.2 KAIA Deposit");
+    // Wallet 3: 0.05 KAIA deposit
+    console.log("\n📝 Step 1: Wallet 3 - 0.05 KAIA Deposit");
     let wallet3Shares = 0n;
     try {
-        const depositAmount = ethers.parseEther("0.2");
+        const depositAmount = ethers.parseEther("0.05");
         const shareVault3 = shareVault.connect(wallet3);
         const tx3 = await shareVault3.depositKAIA(wallet3.address, { value: depositAmount });
         await tx3.wait();
         
         wallet3Shares = await shareVault.balanceOf(wallet3.address);
         console.log("  ✅ Success!");
-        console.log("     Amount: 0.2 KAIA");
+        console.log("     Amount: 0.05 KAIA");
         console.log("     Shares received:", ethers.formatEther(wallet3Shares));
     } catch (error) {
         console.log("  ❌ Failed:", error.message);
@@ -199,9 +199,9 @@ async function main() {
     console.log("╚══════════════════════════════════════════════════════════════╝\n");
     
     console.log("✅ Test Results:");
-    console.log("  • Wallet 1: 1 KAIA deposit");
-    console.log("  • Wallet 2: 1 WKAIA deposit");
-    console.log("  • Wallet 3: 0.2 KAIA deposit + 100% withdrawal");
+    console.log("  • Wallet 1: 0.1 KAIA deposit");
+    console.log("  • Wallet 2: 0.1 WKAIA deposit");
+    console.log("  • Wallet 3: 0.05 KAIA deposit + 100% withdrawal");
     
     console.log("\n✅ Security Fixes Applied:");
     console.log("  • Standard ERC4626 pattern");
