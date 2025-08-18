@@ -267,6 +267,11 @@ contract ShareVault is ERC4626Upgradeable, OwnableUpgradeable, ReentrancyGuardUp
     }
     
     /**
+     * @dev Receive KAIA (needed for WKAIA.withdraw)
+     */
+    receive() external payable {}
+    
+    /**
      * @dev Native KAIA deposit (payable)
      */
     function depositKAIA(address receiver) external payable nonReentrant returns (uint256 shares) {

@@ -98,14 +98,16 @@ async function main() {
         console.log("  Step 1: Wrapping 1 KAIA to WKAIA...");
         const wrapAmount = ethers.parseEther("1");
         const wkaiaWallet2 = wkaia.connect(wallet2);
-        await wkaiaWallet2.deposit({ value: wrapAmount });
+        const wrapTx = await wkaiaWallet2.deposit({ value: wrapAmount });
+        await wrapTx.wait();
         
         const wkaiaBalance = await wkaia.balanceOf(wallet2.address);
         console.log("  ✓ WKAIA balance:", ethers.formatEther(wkaiaBalance));
         
         // Step 2: Approve ShareVault
         console.log("  Step 2: Approving ShareVault...");
-        await wkaiaWallet2.approve(deployments.shareVault, wrapAmount);
+        const approveTx = await wkaiaWallet2.approve(deployments.shareVault, wrapAmount);
+        await approveTx.wait();
         console.log("  ✓ Approved 1 WKAIA");
         
         // Step 3: Deposit to ShareVault

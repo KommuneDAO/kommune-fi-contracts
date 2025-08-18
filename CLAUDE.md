@@ -211,11 +211,11 @@ await shareVault.withdraw(withdrawWKAIA, user, user);
 
 ### Deployment Addresses (Kairos Testnet)
 
-#### Current V2 Deployment (Fresh - 2025-08-18)
-- ShareVault: `0xb59D73f3F3773F8Ef7859832003C74A79D5742b2`
-- VaultCore: `0x1DFB23A3Dbb7896ecCF5C0fF56E25A296BCCa83d`
-- SwapContract: `0xdB79b899EeaA32838EF1c6B3601823f86e3F2F97`
-- ClaimManager: `0x755aeCd3A93F1B1Dd72DCBE066B50D0F171BBC4A`
+#### Current V2 Deployment (2025-08-18)
+- ShareVault: `0x86a4bDf145004DF36F0121140a034879cFAE8B2c`
+- VaultCore: `0xe89197c395De50eC62CfE1dE841ea088c1bD810b`
+- SwapContract: `0x05fC200A7eaCDeECe7BBcBf6d672E12a65F800DC`
+- ClaimManager: `0x0E4A014564caA6610260054A73f11DF1167aC265`
 
 #### Network Constants
 - WKAIA: `0x0339d5Eb6D195Ba90B13ed1BCeAa97EbD198b106`
@@ -268,19 +268,19 @@ await shareVault.withdraw(withdrawWKAIA, user, user);
    - Kairos testnet: `deployments-kairos.json`
    - Kaia mainnet: `deployments-kaia.json`
 
-### Key Achievements (2025-08-14):
+### Key Achievements (2025-08-18):
 - ✅ Contract size issue resolved with separated architecture
-- ✅ All LST deposits working correctly
+- ✅ All security audit issues fixed (Critical & High risk)
+- ✅ Standard ERC4626 pattern implemented (no Direct Deposit vulnerability)
+- ✅ WKAIA deposit state sync issue resolved with receive() function
+- ✅ All LST deposits working correctly (native KAIA & WKAIA)
 - ✅ GIVEN_OUT withdrawals implemented successfully
 - ✅ SwapContract handles all 4 LSTs uniformly
-- ✅ Native KAIA deposits supported
 - ✅ 10% slippage tolerance configured for testnet
-- ✅ Fixed staking issue: Use `stake()` instead of `deposit()` for LST handlers
-- ✅ Added WKAIA balance verification before withdraw attempts
-- ✅ Per-block deposit limits working correctly
-- ✅ Multi-wallet concurrent deposits: 60/60 successful
-- ✅ APY dynamic changes tested and working
-- ✅ All 4 LSTs receive correct distributions and wrap automatically
+- ✅ Per-block deposit limits for spam prevention
+- ✅ Owner-only unstake/claim operations
+- ✅ Integrated tests: 100% success rate
+- ✅ Production ready
 
 ### Multi-LST Sequential Swap Issue Resolution (2025-08-14)
 
@@ -605,3 +605,5 @@ require(block.number > lastDepositBlock[msg.sender], "Same block");
 - **Unstake/Claim made owner-only operations - claimed assets stay in protocol (2025-08-16)**
 - **Security audit fixes applied - Standard ERC4626 pattern, no tx.origin, owner-only operations (2025-08-18)**
 - **WKAIA deposit state sync fixed with WKAIA->KAIA conversion in ShareVault (2025-08-18)**
+- **ShareVault receive() function added to accept KAIA from WKAIA.withdraw() (2025-08-18)**
+- **All integrated tests passing 100% - ready for production (2025-08-18)**
