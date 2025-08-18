@@ -7,38 +7,18 @@ import "./interfaces/IGcKaia.sol";
 import "./interfaces/IStKaia.sol";
 import "./interfaces/IStKlay.sol";
 import {TokenInfo} from "./interfaces/ITokenInfo.sol";
+import {SharedStorage} from "./SharedStorage.sol";
 
 /**
  * @title ClaimManager
  * @dev Handles unstake and claim operations for VaultCore via delegatecall
- * CRITICAL: Storage layout must match VaultCore exactly for delegatecall to work
- * VaultCore's actual storage starts at slot 0, not after the gaps!
+ * 
+ * CRITICAL: Inherits from SharedStorage to ensure identical storage layout with VaultCore
+ * for safe delegatecall operations. NEVER add storage variables here.
  */
-contract ClaimManager {
-    // VaultCore's actual storage layout from proxy storage inspection:
-    // Slot 0: shareVault
-    // Slot 1: wkaia
-    // Slot 2: balancerVault
-    // Slot 3: swapContract
-    // Slot 4: claimManager
-    // Slot 5: tokensInfo (mapping)
-    // Slot 6: lstAPY (mapping)
-    // Slot 7: investRatio
-    // Slot 8: slippage
-    // Slot 9: unstakeRequests (mapping)
-    // Slot 10: unstakeAmounts (mapping)
-    
-    address public shareVault;       // slot 0
-    address public wkaia;            // slot 1
-    address public balancerVault;    // slot 2
-    address public swapContract;     // slot 3
-    address public claimManager;     // slot 4
-    mapping(uint256 => TokenInfo) public tokensInfo;       // slot 5
-    mapping(uint256 => uint256) public lstAPY;            // slot 6
-    uint256 public investRatio;     // slot 7
-    uint256 public slippage;        // slot 8
-    mapping(address => mapping(uint256 => uint256)) public unstakeRequests;  // slot 9
-    mapping(address => mapping(uint256 => uint256)) public unstakeAmounts;   // slot 10
+contract ClaimManager is SharedStorage {
+    // All storage variables are inherited from SharedStorage
+    // DO NOT add any storage variables here - add them to SharedStorage instead
     
     // Events
     event UnstakeRequested(address indexed user, uint256 indexed lstIndex, uint256 amount, uint256 timestamp);
@@ -76,7 +56,9 @@ contract ClaimManager {
             IStKlay(info.handler).unstake(amount);
         } else {
             // StKaia
-            IStKaia(info.handler).unstake(BugHole, tx.origin, amount);
+            // Use address(this) instead of tx.origin for security
+            // In delegatecall context, address(this) is VaultCore
+            IStKaia(info.handler).unstake(BugHole, address(this), amount);
         }
         
         // Record request

@@ -1,5 +1,6 @@
 const { ethers } = require("hardhat");
 const fs = require('fs');
+require("dotenv").config();
 
 /**
  * Test Unstake/Claim Operations
@@ -12,9 +13,11 @@ const fs = require('fs');
  */
 
 async function main() {
-    console.log("=== Test Unstake/Claim Operations ===\n");
+    console.log("╔══════════════════════════════════════════════════════════════╗");
+    console.log("║          UNSTAKE/CLAIM TEST (wKoKAIA ONLY)                  ║");
+    console.log("╚══════════════════════════════════════════════════════════════╝\n");
     
-    const [owner] = await ethers.getSigners();
+    const owner = new ethers.Wallet(process.env.KAIROS_PRIVATE_KEY, ethers.provider);
     const deployments = JSON.parse(fs.readFileSync('deployments-kairos.json', 'utf8'));
     const vaultCoreAddress = deployments.vaultCore;
     const wkaiaAddress = deployments.wkaia;

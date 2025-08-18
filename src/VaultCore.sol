@@ -11,34 +11,22 @@ import {SwapContract} from "./SwapContract.sol";
 import {IBalancerVault, IAsset} from "./interfaces/IBalancerVault.sol";
 import {IWrappedLST} from "./interfaces/IWrappedLST.sol";
 import {IKoKaia} from "./interfaces/IKoKaia.sol";
+import {SharedStorage} from "./SharedStorage.sol";
 
 /**
  * @title VaultCore
  * @dev Core vault logic for managing LST assets
  * This contract handles staking, swapping, and asset management
  * Share management is handled by ShareVault
+ * 
+ * CRITICAL: Inherits from SharedStorage to ensure identical storage layout with ClaimManager
+ * for safe delegatecall operations.
  */
-contract VaultCore is OwnableUpgradeable, UUPSUpgradeable {
+contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
     using SafeERC20 for IERC20;
     
-    // ShareVault contract that manages shares
-    address public shareVault;
-    
-    // Asset addresses
-    address public wkaia; // WKAIA address
-    address public balancerVault;
-    
-    // Helper contracts
-    address public swapContract;
-    address public claimManager;
-    
-    // LST configuration
-    mapping(uint256 => TokenInfo) public tokensInfo;
-    mapping(uint256 => uint256) public lstAPY;
-    
-    // Investment parameters
-    uint256 public investRatio; // How much to stake vs keep liquid (basis points)
-    uint256 public slippage; // Slippage tolerance for swaps
+    // All storage variables are inherited from SharedStorage
+    // DO NOT add any storage variables here - add them to SharedStorage instead
     
     // Events
     event AssetsDeposited(uint256 amount);
@@ -250,13 +238,36 @@ contract VaultCore is OwnableUpgradeable, UUPSUpgradeable {
     }
     
     /**
-     * @dev Handle deposit from ShareVault (deprecated - use handleDirectDeposit)
-     * Kept for backward compatibility but redirects to handleDirectDeposit
+     * @dev Handle deposit from ShareVault (Standard ERC4626 pattern)
+     * ShareVault transfers WKAIA here, then calls this function
+     * @param amount Amount of WKAIA transferred
+     * @param depositor The address of the original depositor
      */
-    function handleDeposit(uint256 amount) external returns (bool) {
+    function handleDeposit(uint256 amount, address depositor) external returns (bool) {
         require(msg.sender == shareVault, "Only ShareVault");
-        // Redirect to handleDirectDeposit with msg.sender as depositor
-        return handleDirectDeposit(amount, msg.sender);
+        require(amount > 0, "Zero amount");
+        
+        // Verify WKAIA was received
+        uint256 wkaiaBalance = IERC20(wkaia).balanceOf(address(this));
+        require(wkaiaBalance >= amount, "Insufficient WKAIA");
+        
+        // Calculate amount to stake
+        uint256 amountToStake = (amount * investRatio) / 10000;
+        
+        if (amountToStake > 0) {
+            require(wkaiaBalance >= amountToStake, "Insufficient WKAIA for stake");
+            
+            // Unwrap WKAIA to KAIA for staking
+            IWKaia(wkaia).withdraw(amountToStake);
+            
+            // Distribute to LSTs based on APY
+            _distributToLSTs(amountToStake);
+            
+            emit StakeExecuted(amountToStake);
+        }
+        
+        emit AssetsDeposited(amount);
+        return true;
     }
     
     /**

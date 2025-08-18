@@ -56,8 +56,8 @@ module.exports = {
       timeout: 600000, // 10 minutes
     },
     kairos: {
-      // url: "https://responsive-green-emerald.kaia-kairos.quiknode.pro", // QuickNode - rate limited
-      url: "https://public-en-kairos.node.kaia.io", // Official Kairos RPC
+      url: "https://responsive-green-emerald.kaia-kairos.quiknode.pro", // QuickNode - rate limited
+      // url: "https://public-en-kairos.node.kaia.io", // Official Kairos RPC
       chainId: 1001,
       accounts: [KAIROS_PRIVATE_KEY],
       timeout: 600000, // 10 minutes

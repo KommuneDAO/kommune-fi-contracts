@@ -1,16 +1,12 @@
 {
-  "swapContract": "0x4FeBBa8B6AE01181373B6d965888D72F99c0416f",
-  "vaultCore": "0x6eCdC06fDc31f9B05a096805d940E94E8a9Df6E2",
-  "shareVault": "0x2fEF94324DF0579A804464F270A0b9BF025Cf4B7",
+  "claimManager": "0x373e072f2f4daC4b66D63a61118018fef896E37d",
+  "swapContract": "0x283b8EDb2E7a97A5e96c49615759dF219384042d",
+  "vaultCore": "0x4768907eC93b1E247789eB4f34662a1558F859FD",
+  "shareVault": "0x2CD219a788209e51cAD383EA28eE4327C8fc5426",
   "wkaia": "0x0339d5Eb6D195Ba90B13ed1BCeAa97EbD198b106",
   "balancerVault": "0x1c9074AA147648567015287B0d4185Cb4E04F86d",
   "chainId": "1001",
   "network": "kairos",
-  "deployedAt": "2025-08-14T23:40:57.967Z",
-  "lastVaultCoreUpgrade": "2025-08-16T07:22:25.159Z",
-  "lastShareVaultUpgrade": "2025-08-16T01:58:34.681Z",
-  "claimManager": "0x01521D22f4B1e35a38C45e0B15CF9AF771294E64",
-  "claimManagerOld": "0x21929E0CC31889598Dc9754d05E52142efFdfb32",
-  "lastClaimManagerDeploy": "2025-08-16T08:14:00.000Z",
-  "note": "ClaimManager fixed with correct storage layout (slot 0 start)"
+  "deployedAt": "2025-08-18T03:22:13.236Z",
+  "lastShareVaultUpgrade": "2025-08-18T06:46:48.590Z"
 }

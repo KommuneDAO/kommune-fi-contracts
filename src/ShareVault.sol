@@ -8,6 +8,10 @@ import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/ut
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
+interface IWKaia {
+    function withdraw(uint256) external;
+}
+
 /**
  * @title ShareVault
  * @dev ERC-4626 implementation for share management
@@ -82,9 +86,9 @@ contract ShareVault is ERC4626Upgradeable, OwnableUpgradeable, ReentrancyGuardUp
     }
     
     /**
-     * @dev Deposit assets and receive shares (Direct Deposit Pattern)
-     * User must first transfer WKAIA directly to VaultCore, then call this function
-     * This avoids state synchronization issues between contracts
+     * @dev Deposit assets and receive shares (Standard ERC4626 Pattern)
+     * User must approve WKAIA to ShareVault first, then call this function
+     * This prevents front-running attacks by using standard pull pattern
      */
     function deposit(uint256 assets, address receiver) 
         public 
@@ -98,24 +102,30 @@ contract ShareVault is ERC4626Upgradeable, OwnableUpgradeable, ReentrancyGuardUp
         require(block.number > lastDepositBlock[msg.sender], "Same block");
         require(vaultCore != address(0), "VaultCore not set");
         
-        // Verify VaultCore has received the WKAIA from user
-        uint256 vaultCoreBalance = IERC20(asset()).balanceOf(vaultCore);
-        require(vaultCoreBalance >= assets, "Transfer WKAIA to VaultCore first");
-        
-        // Calculate shares
+        // Calculate shares before transfer
         shares = previewDeposit(assets);
         require(shares > 0, "Zero shares");
+        
+        // Pull WKAIA from user to ShareVault
+        IERC20(asset()).transferFrom(msg.sender, address(this), assets);
+        
+        // Check balances to create state sync delay
+        uint256 shareVaultWKAIA = IERC20(asset()).balanceOf(address(this));
+        require(shareVaultWKAIA >= assets, "WKAIA not received");
+        
+        // Convert WKAIA to KAIA in ShareVault to avoid state sync issue
+        IWKaia(asset()).withdraw(assets);
         
         // Update tracking
         lastDepositBlock[msg.sender] = block.number;
         deposits[msg.sender].amount += assets;
         deposits[msg.sender].timestamp = block.timestamp;
         
-        // Notify VaultCore to process the already-received WKAIA
-        (bool success,) = vaultCore.call(
-            abi.encodeWithSignature("handleDirectDeposit(uint256,address)", assets, msg.sender)
+        // Send KAIA to VaultCore instead of WKAIA
+        (bool success,) = vaultCore.call{value: assets}(
+            abi.encodeWithSignature("handleDepositKAIA()")
         );
-        require(success, "Core deposit failed");
+        require(success, "Core KAIA deposit failed");
         
         // Mint shares
         _mint(receiver, shares);
@@ -188,18 +198,19 @@ contract ShareVault is ERC4626Upgradeable, OwnableUpgradeable, ReentrancyGuardUp
         require(deposits[msg.sender].amount + assets <= depositLimit, "Limit exceeded");
         require(block.number > lastDepositBlock[msg.sender], "Same block");
         
-        // Verify VaultCore has received the WKAIA from user
-        uint256 vaultCoreBalance = IERC20(asset()).balanceOf(vaultCore);
-        require(vaultCoreBalance >= assets, "Transfer WKAIA to VaultCore first");
+        // Pull WKAIA from user to ShareVault first, then transfer to VaultCore
+        // This two-step process may help with WKAIA state sync issues
+        IERC20(asset()).transferFrom(msg.sender, address(this), assets);
+        IERC20(asset()).transfer(vaultCore, assets);
         
         // Update tracking
         lastDepositBlock[msg.sender] = block.number;
         deposits[msg.sender].amount += assets;
         deposits[msg.sender].timestamp = block.timestamp;
         
-        // Notify VaultCore to process the already-received WKAIA
+        // Notify VaultCore to process the deposit
         (bool success,) = vaultCore.call(
-            abi.encodeWithSignature("handleDirectDeposit(uint256,address)", assets, msg.sender)
+            abi.encodeWithSignature("handleDeposit(uint256,address)", assets, msg.sender)
         );
         require(success, "Core deposit failed");
         

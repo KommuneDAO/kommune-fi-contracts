@@ -4,7 +4,7 @@ const { contracts } = require("../config/constants");
 const { ChainId } = require("../config/config");
 
 async function main() {
-    console.log("🚀 Fresh Deployment of KommuneFi V2 System");
+    console.log("🚀 COMPLETELY FRESH DEPLOYMENT - IGNORING ALL OLD CONTRACTS");
     console.log("════════════════════════════════════════════════\n");
     
     const [deployer] = await ethers.getSigners();
@@ -23,113 +23,150 @@ async function main() {
     const BALANCER_VAULT = contracts.vault[chainIdEnum];
     const TREASURY = contracts.treasury[chainIdEnum];
     
-    if (!WKAIA || !BALANCER_VAULT || !TREASURY) {
-        throw new Error(`No constants defined for chainId: ${chainId}`);
-    }
-    
     console.log("📍 Network Constants:");
     console.log("  WKAIA:", WKAIA);
     console.log("  Balancer Vault:", BALANCER_VAULT);
     console.log("  Treasury:", TREASURY);
     console.log("");
     
-    const deployments = {};
+    const newDeployments = {};
     
-    // 1. Deploy SwapContract
-    console.log("1️⃣ Deploying SwapContract...");
+    // 1. Deploy ClaimManager (non-upgradeable)
+    console.log("1️⃣ Deploying ClaimManager (non-upgradeable)...");
+    const ClaimManager = await ethers.getContractFactory("ClaimManager");
+    const claimManager = await ClaimManager.deploy();
+    await claimManager.waitForDeployment();
+    newDeployments.claimManager = await claimManager.getAddress();
+    console.log("   ✅ ClaimManager deployed at:", newDeployments.claimManager);
+    
+    // 2. Deploy SwapContract (as upgradeable proxy)
+    console.log("\n2️⃣ Deploying SwapContract (UUPS proxy)...");
     const SwapContract = await ethers.getContractFactory("SwapContract");
-    const swapContract = await SwapContract.deploy();
+    const swapContract = await upgrades.deployProxy(
+        SwapContract,
+        [deployer.address], // Initialize with deployer as owner
+        { 
+            initializer: "initialize",
+            kind: 'uups',
+            redeployImplementation: 'always' // Force new implementation
+        }
+    );
     await swapContract.waitForDeployment();
-    deployments.swapContract = await swapContract.getAddress();
-    console.log("   ✅ SwapContract deployed at:", deployments.swapContract);
+    newDeployments.swapContract = await swapContract.getAddress();
+    console.log("   ✅ SwapContract deployed at:", newDeployments.swapContract);
     
-    // 2. Deploy VaultCore (UUPS Proxy)
-    console.log("\n2️⃣ Deploying VaultCore...");
+    // 3. Deploy VaultCore (UUPS Proxy)
+    console.log("\n3️⃣ Deploying VaultCore (UUPS proxy)...");
     const VaultCore = await ethers.getContractFactory("VaultCore");
     const vaultCore = await upgrades.deployProxy(
         VaultCore,
         [
             WKAIA,
             BALANCER_VAULT,
-            deployments.swapContract,
-            10000  // 100% invest ratio
+            newDeployments.swapContract,
+            9000  // 90% invest ratio
         ],
         { 
             initializer: "initialize",
             kind: 'uups',
-            unsafeAllow: ["delegatecall"]
+            unsafeAllow: ["delegatecall"],
+            redeployImplementation: 'always' // Force new implementation
         }
     );
     await vaultCore.waitForDeployment();
-    deployments.vaultCore = await vaultCore.getAddress();
-    console.log("   ✅ VaultCore deployed at:", deployments.vaultCore);
+    newDeployments.vaultCore = await vaultCore.getAddress();
+    console.log("   ✅ VaultCore deployed at:", newDeployments.vaultCore);
     
-    // 3. Deploy ShareVault (UUPS Proxy) 
-    console.log("\n3️⃣ Deploying ShareVault...");
+    // 4. Deploy ShareVault (UUPS Proxy) 
+    console.log("\n4️⃣ Deploying ShareVault (UUPS proxy)...");
     const ShareVault = await ethers.getContractFactory("ShareVault");
     const shareVault = await upgrades.deployProxy(
         ShareVault,
         [
-            WKAIA,                     // asset (WKAIA)
-            deployments.vaultCore,     // vaultCore
-            1000,                      // basisPointsFees (10%)
-            TREASURY                   // treasury address from constants
+            WKAIA,                      // asset (WKAIA)
+            newDeployments.vaultCore,   // vaultCore
+            1000,                       // basisPointsFees (10%)
+            TREASURY                    // treasury address
         ],
         { 
             initializer: "initialize",
-            kind: 'uups'
+            kind: 'uups',
+            redeployImplementation: 'always' // Force new implementation
         }
     );
     await shareVault.waitForDeployment();
-    deployments.shareVault = await shareVault.getAddress();
-    console.log("   ✅ ShareVault deployed at:", deployments.shareVault);
+    newDeployments.shareVault = await shareVault.getAddress();
+    console.log("   ✅ ShareVault deployed at:", newDeployments.shareVault);
     
-    // 4. Configure connections
-    console.log("\n4️⃣ Configuring connections...");
+    // 5. Configure connections
+    console.log("\n5️⃣ Configuring connections...");
     
     // Set ShareVault in VaultCore
-    await vaultCore.setShareVault(deployments.shareVault);
+    let tx = await vaultCore.setShareVault(newDeployments.shareVault);
+    await tx.wait();
     console.log("   ✅ VaultCore.setShareVault completed");
     
+    // Set ClaimManager in VaultCore
+    tx = await vaultCore.setClaimManager(newDeployments.claimManager);
+    await tx.wait();
+    console.log("   ✅ VaultCore.setClaimManager completed");
+    
     // Set SwapContract authorized caller
-    await swapContract.setAuthorizedCaller(deployments.vaultCore);
+    tx = await swapContract.setAuthorizedCaller(newDeployments.vaultCore);
+    await tx.wait();
     console.log("   ✅ SwapContract.setAuthorizedCaller completed");
     
-    // 5. Set initial APY (for testing)
-    console.log("\n5️⃣ Setting initial APY...");
+    // 6. LST tokens are already configured in VaultCore initialization
+    console.log("\n6️⃣ LST tokens already configured in contract initialization");
+    
+    // Verify token configuration
+    const token0 = await vaultCore.tokensInfo(0);
+    console.log("   ✅ wKoKAIA configured:", token0.handler !== "0x0000000000000000000000000000000000000000");
+    const token1 = await vaultCore.tokensInfo(1);
+    console.log("   ✅ wGCKAIA configured:", token1.handler !== "0x0000000000000000000000000000000000000000");
+    const token2 = await vaultCore.tokensInfo(2);
+    console.log("   ✅ wstKLAY configured:", token2.handler !== "0x0000000000000000000000000000000000000000");
+    const token3 = await vaultCore.tokensInfo(3);
+    console.log("   ✅ stKAIA configured:", token3.handler !== "0x0000000000000000000000000000000000000000");
+    
+    // 7. Set initial APY
+    console.log("\n7️⃣ Setting initial APY...");
     await vaultCore.setAPY(0, 2500); // wKoKAIA: 25%
     await vaultCore.setAPY(1, 2500); // wGCKAIA: 25%
     await vaultCore.setAPY(2, 2500); // wstKLAY: 25%
     await vaultCore.setAPY(3, 2500); // stKAIA: 25%
     console.log("   ✅ APY set to 25% for all LSTs");
     
-    // 6. Save deployment addresses
-    console.log("\n6️⃣ Saving deployment addresses...");
-    deployments.wkaia = WKAIA;
-    deployments.balancerVault = BALANCER_VAULT;
-    deployments.chainId = chainId.toString();
-    deployments.network = networkName;
-    deployments.deployedAt = new Date().toISOString();
+    // 8. Save deployment addresses
+    console.log("\n8️⃣ Saving deployment addresses...");
+    newDeployments.wkaia = WKAIA;
+    newDeployments.balancerVault = BALANCER_VAULT;
+    newDeployments.chainId = chainId.toString();
+    newDeployments.network = networkName;
+    newDeployments.deployedAt = new Date().toISOString();
     
     const filename = `deployments-${networkName}.json`;
-    fs.writeFileSync(filename, JSON.stringify(deployments, null, 2));
+    fs.writeFileSync(filename, JSON.stringify(newDeployments, null, 2));
     console.log(`   ✅ Deployment addresses saved to ${filename}`);
     
-    // 7. Verify deployment
-    console.log("\n7️⃣ Verifying deployment...");
+    // 9. Verify deployment
+    console.log("\n9️⃣ Verifying deployment...");
     
     // Check connections
     const vcShareVault = await vaultCore.shareVault();
     const vcSwapContract = await vaultCore.swapContract();
+    const vcClaimManager = await vaultCore.claimManager();
     const svVaultCore = await shareVault.vaultCore();
     const scAuthorized = await swapContract.authorizedCaller();
     
     console.log("   ShareVault <-> VaultCore:", 
-        vcShareVault === deployments.shareVault && svVaultCore === deployments.vaultCore ? "✅" : "❌");
+        vcShareVault === newDeployments.shareVault && svVaultCore === newDeployments.vaultCore ? "✅" : "❌");
     console.log("   VaultCore -> SwapContract:", 
-        vcSwapContract === deployments.swapContract ? "✅" : "❌");
+        vcSwapContract === newDeployments.swapContract ? "✅" : "❌");
+    console.log("   VaultCore -> ClaimManager:", 
+        vcClaimManager === newDeployments.claimManager ? "✅" : "❌");
     console.log("   SwapContract authorized:", 
-        scAuthorized === deployments.vaultCore ? "✅" : "❌");
+        scAuthorized === newDeployments.vaultCore ? "✅" : "❌");
     
     // Check APY
     const apy0 = await vaultCore.lstAPY(0);
@@ -139,25 +176,24 @@ async function main() {
     console.log("   APY configured:", 
         apy0 === 2500n && apy1 === 2500n && apy2 === 2500n && apy3 === 2500n ? "✅" : "❌");
     
-    // Check initial state
-    const totalAssets = await shareVault.totalAssets();
-    const totalSupply = await shareVault.totalSupply();
-    console.log("\n   Initial State:");
-    console.log("   Total Assets:", ethers.formatEther(totalAssets));
-    console.log("   Total Supply:", ethers.formatEther(totalSupply));
+    // Check invest ratio
+    const investRatio = await vaultCore.investRatio();
+    console.log("   Invest ratio:", investRatio.toString(), `(${investRatio / 100n}% to LSTs)`);
     
     console.log("\n════════════════════════════════════════════════");
-    console.log("🎉 Fresh Deployment Complete!");
+    console.log("🎉 COMPLETELY FRESH DEPLOYMENT COMPLETE!");
     console.log("════════════════════════════════════════════════");
-    console.log("\n📝 Summary:");
-    console.log("  ShareVault:", deployments.shareVault);
-    console.log("  VaultCore:", deployments.vaultCore);
-    console.log("  SwapContract:", deployments.swapContract);
-    console.log("  WKAIA:", deployments.wkaia);
+    console.log("\n📝 New Deployment Summary:");
+    console.log("  ShareVault:", newDeployments.shareVault);
+    console.log("  VaultCore:", newDeployments.vaultCore);
+    console.log("  SwapContract:", newDeployments.swapContract);
+    console.log("  ClaimManager:", newDeployments.claimManager);
+    console.log("  WKAIA:", newDeployments.wkaia);
     console.log("\n💡 Next Steps:");
-    console.log("  1. Run deposit tests");
-    console.log("  2. Run withdrawal tests");
-    console.log("  3. Monitor for any stuck tokens");
+    console.log("  1. Test WKAIA deposits with Standard ERC4626");
+    console.log("  2. Test native KAIA deposits");
+    console.log("  3. Test withdrawals");
+    console.log("  4. Verify all security fixes");
 }
 
 main()

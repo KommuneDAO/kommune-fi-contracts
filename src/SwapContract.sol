@@ -6,12 +6,14 @@ import {IAsset, IBalancerVault} from "./interfaces/IBalancerVault.sol";
 import {IWrapped} from "./interfaces/IWrapped.sol";
 import {TokenInfo} from "./interfaces/ITokenInfo.sol";
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
-contract SwapContract is Initializable, OwnableUpgradeable {
+contract SwapContract is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     
-    function initialize() external initializer {
-        __Ownable_init(msg.sender);
+    function initialize(address _owner) external initializer {
+        __Ownable_init(_owner);
+        __UUPSUpgradeable_init();
     }
 
     function swap(
@@ -224,8 +226,9 @@ contract SwapContract is Initializable, OwnableUpgradeable {
     // Only callable by authorized contracts (VaultCore)
     address public authorizedCaller;
     
-    function setAuthorizedCaller(address _caller) external {
+    function setAuthorizedCaller(address _caller) external onlyOwner {
         require(authorizedCaller == address(0), "Already set");
+        require(_caller != address(0), "Invalid address");
         authorizedCaller = _caller;
     }
     
@@ -233,4 +236,9 @@ contract SwapContract is Initializable, OwnableUpgradeable {
         require(msg.sender == authorizedCaller, "Not authorized");
         IERC20(token).transfer(msg.sender, amount);
     }
+    
+    /**
+     * @dev Required override for UUPS upgradeable contracts
+     */
+    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 }
