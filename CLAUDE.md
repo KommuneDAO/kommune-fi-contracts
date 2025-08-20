@@ -589,6 +589,44 @@ require(block.number > lastDepositBlock[msg.sender], "Same block");
 - Same-block attempts: Still blocked by per-block limit
 - Recommendation: Keep for now, review later
 
+### Balancer JoinPool userData Encoding (2025-08-20)
+
+**⚠️ CRITICAL: userData encoding for Balancer joinPool must exclude BPT token amounts**
+
+#### Issue Summary:
+- **Symptom**: joinPool fails with execution reverted when BALANCED mode is enabled
+- **Root Cause**: userData was encoding all 5 token amounts (4 LSTs + BPT) instead of just 4 LST amounts
+- **Resolution**: Only encode LST amounts in userData, exclude BPT even though it's in assets array
+
+#### Correct Implementation:
+```solidity
+// WRONG - Causes joinPool to fail
+userData: abi.encode(1, maxAmountsIn, 0)  // maxAmountsIn has 5 elements including BPT
+
+// CORRECT - Works properly
+uint256[] memory amountsForUserData = new uint256[](4);
+amountsForUserData[0] = maxAmountsIn[0]; // wGCKAIA
+amountsForUserData[1] = maxAmountsIn[1]; // stKAIA  
+amountsForUserData[2] = maxAmountsIn[2]; // wstKLAY
+amountsForUserData[3] = maxAmountsIn[3]; // wKoKAIA
+// BPT amount NOT included in userData
+userData: abi.encode(1, amountsForUserData, 0)  // JOIN_KIND_EXACT_TOKENS_IN_FOR_BPT_OUT
+```
+
+#### Key Points:
+1. **assets array**: Must include all 5 tokens (4 LSTs + BPT)
+2. **maxAmountsIn array**: Must include all 5 amounts (4 LST amounts + 0 for BPT)
+3. **userData encoding**: Must include ONLY 4 LST amounts, NOT the BPT
+
+#### Why This Matters:
+- BPT is the OUTPUT of joinPool, not an INPUT
+- JOIN_KIND_EXACT_TOKENS_IN_FOR_BPT_OUT (type 1) expects only input token amounts in userData
+- Including BPT amount in userData causes Balancer to reject the transaction
+
+#### Test Transaction Reference:
+- Successful tx: 0x497d271f... (provided by user) shows correct encoding pattern
+- This pattern is now implemented in VaultCore._addLSTsToPool1()
+
 ## Session History
 - Initial V1: Single contract (KommuneVault)
 - V1.5: Optimized KVaultV2 hit 24KB size limit  
@@ -607,3 +645,6 @@ require(block.number > lastDepositBlock[msg.sender], "Same block");
 - **WKAIA deposit state sync fixed with WKAIA->KAIA conversion in ShareVault (2025-08-18)**
 - **ShareVault receive() function added to accept KAIA from WKAIA.withdraw() (2025-08-18)**
 - **All integrated tests passing 100% - ready for production (2025-08-18)**
+- **BALANCED investment type implemented with Balancer pool integration (2025-08-20)**
+- **JoinPool userData encoding fixed - exclude BPT from userData array (2025-08-20)**
+- **ExitPool implementation completed with EXACT_BPT_IN_FOR_ONE_TOKEN_OUT (2025-08-20)**

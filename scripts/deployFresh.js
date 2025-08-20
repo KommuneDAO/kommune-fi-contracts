@@ -39,7 +39,7 @@ async function main() {
     newDeployments.claimManager = await claimManager.getAddress();
     console.log("   ✅ ClaimManager deployed at:", newDeployments.claimManager);
     
-    // 2. Deploy SwapContract (as upgradeable proxy)
+    // 2. Deploy SwapContract (upgradeable proxy)
     console.log("\n2️⃣ Deploying SwapContract (UUPS proxy)...");
     const SwapContract = await ethers.getContractFactory("SwapContract");
     const swapContract = await upgrades.deployProxy(
@@ -58,13 +58,17 @@ async function main() {
     // 3. Deploy VaultCore (UUPS Proxy)
     console.log("\n3️⃣ Deploying VaultCore (UUPS proxy)...");
     const VaultCore = await ethers.getContractFactory("VaultCore");
+    
+    // Default investRatio: 90% for maximum user returns
+    const investRatio = 9000; // 90% to maximize investment returns
+    
     const vaultCore = await upgrades.deployProxy(
         VaultCore,
         [
             WKAIA,
             BALANCER_VAULT,
             newDeployments.swapContract,
-            9000  // 90% invest ratio
+            investRatio
         ],
         { 
             initializer: "initialize",
@@ -76,6 +80,7 @@ async function main() {
     await vaultCore.waitForDeployment();
     newDeployments.vaultCore = await vaultCore.getAddress();
     console.log("   ✅ VaultCore deployed at:", newDeployments.vaultCore);
+    console.log("   📊 Investment Ratio: 90% (maximizing user returns)");
     
     // 4. Deploy ShareVault (UUPS Proxy) 
     console.log("\n4️⃣ Deploying ShareVault (UUPS proxy)...");
@@ -137,20 +142,39 @@ async function main() {
     await vaultCore.setAPY(3, 2500); // stKAIA: 25%
     console.log("   ✅ APY set to 25% for all LSTs");
     
-    // 8. Save deployment addresses
-    console.log("\n8️⃣ Saving deployment addresses...");
+    // 8. Set investment ratios
+    console.log("\n8️⃣ Setting investment ratios...");
+    await vaultCore.setInvestmentRatios(
+        investRatio,  // All 90% to stable (LST staking)
+        0,            // 0% to balanced
+        0             // 0% to aggressive
+    );
+    console.log("   ✅ Investment ratios configured:");
+    console.log("      - Stable (LST): 90%");
+    console.log("      - Balanced: 0%");
+    console.log("      - Aggressive: 0%");
+    
+    // 9. Save deployment addresses
+    console.log("\n9️⃣ Saving deployment addresses...");
     newDeployments.wkaia = WKAIA;
     newDeployments.balancerVault = BALANCER_VAULT;
     newDeployments.chainId = chainId.toString();
     newDeployments.network = networkName;
     newDeployments.deployedAt = new Date().toISOString();
+    newDeployments.profile = "stable";
+    newDeployments.configuration = {
+        investRatio: investRatio,
+        stableRatio: investRatio,
+        balancedRatio: 0,
+        aggressiveRatio: 0
+    };
     
     const filename = `deployments-${networkName}.json`;
     fs.writeFileSync(filename, JSON.stringify(newDeployments, null, 2));
     console.log(`   ✅ Deployment addresses saved to ${filename}`);
     
-    // 9. Verify deployment
-    console.log("\n9️⃣ Verifying deployment...");
+    // 10. Verify deployment
+    console.log("\n🔟 Verifying deployment...");
     
     // Check connections
     const vcShareVault = await vaultCore.shareVault();
@@ -176,9 +200,13 @@ async function main() {
     console.log("   APY configured:", 
         apy0 === 2500n && apy1 === 2500n && apy2 === 2500n && apy3 === 2500n ? "✅" : "❌");
     
-    // Check invest ratio
-    const investRatio = await vaultCore.investRatio();
-    console.log("   Invest ratio:", investRatio.toString(), `(${investRatio / 100n}% to LSTs)`);
+    // Check investment ratios
+    const ratios = await vaultCore.getInvestmentRatios();
+    console.log("   Investment Ratios:");
+    console.log(`      Total: ${Number(ratios.total) / 100}%`);
+    console.log(`      Stable: ${Number(ratios.stable) / 100}%`);
+    console.log(`      Balanced: ${Number(ratios.balanced) / 100}%`);
+    console.log(`      Aggressive: ${Number(ratios.aggressive) / 100}%`);
     
     console.log("\n════════════════════════════════════════════════");
     console.log("🎉 COMPLETELY FRESH DEPLOYMENT COMPLETE!");
@@ -189,11 +217,14 @@ async function main() {
     console.log("  SwapContract:", newDeployments.swapContract);
     console.log("  ClaimManager:", newDeployments.claimManager);
     console.log("  WKAIA:", newDeployments.wkaia);
+    console.log("\n📊 Investment Profile: STABLE");
+    console.log("  Total Investment: 90%");
+    console.log("  Stable Strategy: 90% (LST staking)");
+    console.log("  Liquidity Buffer: 10%");
     console.log("\n💡 Next Steps:");
-    console.log("  1. Test WKAIA deposits with Standard ERC4626");
-    console.log("  2. Test native KAIA deposits");
-    console.log("  3. Test withdrawals");
-    console.log("  4. Verify all security fixes");
+    console.log("  1. Run integration tests: npx hardhat run scripts/testIntegrated.js --network", networkName);
+    console.log("  2. Change profile if needed using setInvestmentRatios()");
+    console.log("  3. Adjust APY distribution if needed");
 }
 
 main()

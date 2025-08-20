@@ -39,12 +39,23 @@ contract SharedStorage {
     // ========== DEPOSIT TRACKING (slot 11) ==========
     mapping(address => uint256) public lastDepositBlock;  // slot 11 - anti-spam protection
     
+    // ========== INVESTMENT STRATEGY ALLOCATION (slots 12-13) ==========
+    // All ratios are in basis points (10000 = 100%)
+    // balancedRatio + aggressiveRatio <= 10000 (100%)
+    // These determine how much of the LSTs (obtained via investRatio) go to pools
+    uint256 public balancedRatio;   // slot 12 - % of LSTs to add to pool1 for LP tokens
+    uint256 public aggressiveRatio; // slot 13 - % of LSTs to add to pool2 for LP tokens
+    
+    // ========== BALANCER LP TRACKING (slots 15-16) ==========
+    mapping(uint256 => uint256) public lpBalances;      // slot 15 - lstIndex => LP token balance
+    mapping(uint256 => address) public lpTokens;        // slot 16 - lstIndex => LP token address
+    
     // ========== RESERVE FOR FUTURE UPGRADES ==========
     // When adding new variables:
     // 1. Add them here (before __gap)
     // 2. Decrease __gap size accordingly
-    // Example: uint256 public newVariable; // slot 12
-    //          uint256[38] private __gap;  // reduced from 39
+    // Example: uint256 public newVariable; // slot 17
+    //          uint256[33] private __gap;  // reduced from 34
     
-    uint256[39] private __gap;  // Reserve slots 12-50 for future variables
+    uint256[34] private __gap;  // Reserve slots 17-50 for future variables
 }

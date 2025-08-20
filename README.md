@@ -1,7 +1,7 @@
 # KommuneFi Contracts - ERC20 Version
 
 ## Overview
-KommuneFi is a liquid staking protocol on Kaia blockchain that allows users to deposit KAIA and receive kvKAIA tokens representing their staked position. The protocol automatically distributes staked KAIA across multiple Liquid Staking Token (LST) protocols based on configured APY rates.
+KommuneFi is a liquid staking protocol on Kaia blockchain that allows users to deposit KAIA and receive kvKAIA tokens representing their staked position. The protocol supports multiple investment profiles (Stable, Balanced, Aggressive) and automatically distributes staked KAIA across multiple Liquid Staking Token (LST) protocols based on configured APY rates and investment strategies.
 
 ## Architecture
 
@@ -9,9 +9,10 @@ KommuneFi is a liquid staking protocol on Kaia blockchain that allows users to d
 The protocol uses a separated architecture to overcome contract size limitations:
 
 - **ShareVault** (12.23 KB): ERC-4626 compliant contract managing shares (kvKAIA tokens)
-- **VaultCore** (10.17 KB): Core logic for LST management, asset handling, and unstake/claim operations
+- **VaultCore** (10.17 KB): Core logic for LST management, investment strategies, and unstake/claim operations
 - **SwapContract** (9.26 KB): Handles Balancer pool swaps for withdrawals (**FINALIZED - DO NOT MODIFY**)
 - **ClaimManager**: Handles unstake/claim operations via delegatecall to reduce VaultCore size
+- **SharedStorage**: Base storage contract ensuring identical layout for delegatecall safety
 
 ### Previous Architecture (V1)
 - **KommuneVault**: Original single contract implementation (reference)
@@ -22,6 +23,11 @@ The protocol uses a separated architecture to overcome contract size limitations
 2. **wGCKAIA** (Index 1): Wrapped GcKaia protocol tokens  
 3. **wstKLAY** (Index 2): Wrapped stKLAY protocol tokens
 4. **stKAIA** (Index 3): Native stKAIA tokens
+
+### Investment Strategies
+1. **Stable Strategy**: Direct LST staking for staking rewards
+2. **Balanced Strategy**: LST staking + Balancer pool liquidity for additional swap fees
+3. **Aggressive Strategy**: Future implementation for higher risk/reward strategies
 
 ## Deployment
 
@@ -36,38 +42,38 @@ cp .env.example .env
 ```
 
 ### Deploy Fresh Contracts
+
+#### Option 1: Deploy with Investment Profile
+```bash
+# Deploy with specific investment profile (stable/balanced/aggressive)
+INVESTMENT_PROFILE=stable npx hardhat run scripts/deployWithProfile.js --network kairos
+INVESTMENT_PROFILE=balanced npx hardhat run scripts/deployWithProfile.js --network kairos
+INVESTMENT_PROFILE=aggressive npx hardhat run scripts/deployWithProfile.js --network kairos
+```
+
+#### Option 2: Standard Deployment
 ```bash
 # Testnet deployment
-npm run deploy:testnet          # Deploy all V2 contracts to Kairos
-npm run setup:testnet           # Configure APY values
-npm run test:testnet            # Run integrated tests
+npx hardhat run scripts/deploySeparatedVault.js --network kairos
+npx hardhat run scripts/deploySwapContract.js --network kairos
+npx hardhat run scripts/setupSeparatedVault.js --network kairos
 
 # Mainnet deployment
-npm run deploy:mainnet          # Deploy all V2 contracts to Kaia
-npm run setup:mainnet           # Configure APY values
-npm run test:mainnet            # Run integrated tests
+npx hardhat run scripts/deploySeparatedVault.js --network kaia
+npx hardhat run scripts/deploySwapContract.js --network kaia
+npx hardhat run scripts/setupSeparatedVault.js --network kaia
 ```
 
 ### Upgrade Existing Deployment
 ```bash
-# Testnet upgrades
-npm run upgrade:testnet         # Upgrade VaultCore (default)
-npm run upgrade:testnet:core    # Upgrade VaultCore only
-npm run upgrade:testnet:share   # Upgrade ShareVault only
-npm run upgrade:testnet:swap    # Deploy new SwapContract
-npm run deploy:testnet:claim    # Deploy ClaimManager (first time)
-npm run upgrade:testnet:claim   # Upgrade ClaimManager
+# Upgrade VaultCore (includes investment ratio support)
+npx hardhat run scripts/upgradeSeparatedVault.js --network kairos
 
-# Mainnet upgrades
-npm run upgrade:mainnet         # Upgrade VaultCore (default)
-npm run upgrade:mainnet:core    # Upgrade VaultCore only
-npm run upgrade:mainnet:share   # Upgrade ShareVault only
-npm run upgrade:mainnet:swap    # Deploy new SwapContract
-npm run deploy:mainnet:claim    # Deploy ClaimManager (first time)
-npm run upgrade:mainnet:claim   # Upgrade ClaimManager
+# Upgrade with investment ratio initialization
+npx hardhat run scripts/temp/upgradeVaultCoreWithRatios.js --network kairos
 
-# Direct script execution (for custom options)
-npx hardhat run scripts/upgradeContracts.js --network kairos -- --all
+# Deploy new ClaimManager if needed
+npx hardhat run scripts/deployClaimManager.js --network kairos
 ```
 
 ### V1 Legacy Commands (DO NOT USE)
@@ -96,9 +102,10 @@ await shareVault.deposit(amount, receiver);
 ### Separated Architecture (V2) - Latest
 | Contract | Address | Size |
 |----------|---------|------|
-| ShareVault | 0x2fEF94324DF0579A804464F270A0b9BF025Cf4B7 | 12.23 KB |
-| VaultCore | 0x6eCdC06fDc31f9B05a096805d940E94E8a9Df6E2 | 10.17 KB |
-| SwapContract | 0x4FeBBa8B6AE01181373B6d965888D72F99c0416f | 9.26 KB |
+| ShareVault | 0xB589753637000106c98FdaBb409144cE8aebC7Ed | 12.23 KB |
+| VaultCore | 0x84591428Fc67cff1337b5Db1D62abE1378a20415 | 10.17 KB |
+| SwapContract | 0xDd44CbA11903eB83e8d0f9e41b4d114fA45818d8 | 9.26 KB |
+| ClaimManager | 0x4bECEABFfD764212Ed9F66F8cA671D01A430f540 | - |
 
 ### Previous Deployments
 - **KVaultV2**: 0xfBF698074Cc9D6496c22faa117616E2038551424 (23.99 KB - at size limit)
@@ -113,8 +120,14 @@ Default APY configuration (set via `setupSeparatedVault.js`):
 - stKAIA: 8%
 
 ### Vault Parameters
-- **Invest Ratio**: 90% (90% staked, 10% kept liquid)
-- **Deposit Limit**: 100 WKAIA per user
+
+#### Investment Profiles
+- **Stable Profile**: 90% invested (100% to LST staking), 10% liquidity
+- **Balanced Profile**: 90% invested (50% LST, 50% balanced strategies), 10% liquidity
+- **Aggressive Profile**: 90% invested (40% LST, 30% balanced, 30% aggressive), 10% liquidity
+
+#### Other Parameters
+- **Deposit Limit**: Per-block limit for spam prevention
 - **Fees**: 0.1% (10 basis points)
 - **Slippage**: 10% tolerance for testnet
 
@@ -122,32 +135,69 @@ Default APY configuration (set via `setupSeparatedVault.js`):
 
 ### Run Integrated Test Suite
 ```bash
-# Complete test suite including deposits, withdrawals, and concurrent operations
-npm run test:testnet            # Test on Kairos testnet
+# Comprehensive integrated test (all features)
+npm run test:testnet            # Test on Kairos testnet  
 npm run test:mainnet            # Test on Kaia mainnet
 
 # Or directly with hardhat
 npx hardhat run scripts/testIntegrated.js --network kairos
+npx hardhat run scripts/testIntegrated.js --network kaia
 ```
 
-### Test Coverage
-The integrated test suite covers:
+The integrated test includes:
+- Fresh contract deployment with STABLE profile
+- 3-wallet deposit/withdraw testing (STABLE)
+- Unstake & claim testing
+- Switch to BALANCED profile  
+- 3-wallet deposit/withdraw testing (BALANCED)
+- LP creation and fund recovery verification
 
-1. **Deposit Tests**
-   - Large deposit for liquidity buffer (3 KAIA)
-   - Small user deposits (0.1 KAIA)
-   - Native KAIA and WKAIA deposits
-   - Share minting verification
+### Comprehensive Test Coverage
 
-2. **Withdrawal Tests**
-   - 100% withdrawal (most common user action)
-   - GIVEN_OUT swap execution
-   - Gas usage optimization
+The integrated test suite (`npm run test:testnet`) provides complete validation:
 
-3. **Concurrent Operations**
-   - Multiple simultaneous deposits
-   - Concurrent withdrawals
-   - Race condition handling
+#### Phase 1: Fresh Deployment & STABLE Profile
+1. **Fresh Contract Deployment**
+   - Deploy with STABLE profile (90% LST staking)
+   - Clean state without interference from previous tests
+   
+2. **3-Wallet STABLE Testing**
+   - Wallet 1: Large deposit (3 KAIA) for liquidity buffer
+   - Wallet 2: Medium deposit (0.1 KAIA) 
+   - Wallet 3: Small deposit (0.05 KAIA)
+   - LST distribution verification
+   - Withdrawal testing (50% and 100%)
+   
+3. **Unstake & Claim Testing**
+   - Full unstake/claim cycle with wKoKAIA
+   - 10-minute waiting period
+   - Protocol asset growth verification
+
+#### Phase 2: BALANCED Profile Testing
+4. **Profile Switch to BALANCED**
+   - Dynamic ratio configuration (45% LST + 45% LP)
+   - Maintain 90% total investment for maximum returns
+   
+5. **3-Wallet BALANCED Testing**
+   - Same wallets make additional deposits
+   - LP token creation and tracking
+   - Balanced strategy verification
+   - Withdrawal with LP positions
+   
+6. **LP Fund Recovery Verification**
+   - Remove liquidity from LP positions (owner function)
+   - Verify LST token recovery from LP
+   - Confirm deposited funds not locked in LP pools
+   - Test large withdrawals requiring LP liquidation
+
+#### Key Features Validated
+- ✅ Multiple investment strategies (Stable, Balanced)
+- ✅ 3-wallet concurrent testing for real-world scenarios
+- ✅ Native KAIA deposits and WKAIA withdrawals
+- ✅ LST distribution across 4 protocols
+- ✅ Unstake/claim operations for asset realization
+- ✅ Balancer LP integration with fund recovery
+- ✅ Dynamic profile switching without disruption
 
 ### Known Issues & Solutions
 
@@ -179,20 +229,52 @@ The integrated test suite covers:
 
 ```
 scripts/
-├── deployFresh.js              # Complete fresh deployment (V2)
-├── upgradeVaultCore.js         # Upgrade VaultCore individually
-├── upgradeShareVault.js        # Upgrade ShareVault individually  
-├── upgradeSwapContract.js      # Deploy new SwapContract
-├── deployClaimManager.js       # Deploy ClaimManager (first time)
-├── upgradeClaimManager.js      # Upgrade ClaimManager
-├── upgradeContracts.js         # Combined upgrade script with options
-├── upgradeAll.js               # Upgrade all contracts
+├── deployWithProfile.js        # Deploy with investment profile (recommended)
+├── deploySeparatedVault.js     # Deploy ShareVault + VaultCore
+├── deploySwapContract.js       # Deploy SwapContract
+├── deployClaimManager.js       # Deploy ClaimManager
+├── setupSeparatedVault.js      # Configure contracts after deployment
+├── upgradeSeparatedVault.js    # Upgrade VaultCore
 ├── setAPY.js                   # Configure APY values
-├── testIntegrated.js           # Integrated test suite
-├── deploySeparatedVault.js    # Legacy V2 deployment
+├── testIntegrated.js           # Comprehensive integrated test suite
 ├── deploy.js                   # V1 deployment (DO NOT MODIFY)
 ├── upgrade.js                  # V1 upgrade (DO NOT MODIFY)
-└── temp/                       # Temporary test scripts
+├── tests/                      # Component test scripts
+│   ├── testDepositWithdraw.js
+│   └── testUnstakeClaim.js
+└── temp/                       # Temporary and legacy test scripts
+    ├── testIntegratedOld.js    # Legacy basic test
+    ├── testIntegratedAllProfiles.js # Legacy profile test
+    ├── testInvestmentRatios.js
+    └── upgradeVaultCoreWithRatios.js
+```
+
+## Investment Profiles
+
+### Overview
+KommuneFi V2 supports flexible investment strategy allocation through configurable ratios:
+
+| Profile | Total Investment | LST Staking | Balanced | Aggressive | Liquidity |
+|---------|-----------------|-------------|----------|------------|-----------|
+| Stable | 90% | 90% | 0% | 0% | 10% |
+| Balanced | 90% | 45% | 45% | 0% | 10% |
+| Aggressive | 90% | 36% | 27% | 27% | 10% |
+
+### Setting Investment Ratios
+```javascript
+// Example: Set balanced profile
+await vaultCore.setInvestRatio(9000);  // 90% total investment for maximum returns
+await vaultCore.setInvestmentRatios(
+    4500,  // 45% to stable (LST)
+    4500,  // 45% to balanced
+    0      // 0% to aggressive
+);
+
+// Query current ratios
+const ratios = await vaultCore.getInvestmentRatios();
+console.log(`Stable: ${ratios.stable / 100}%`);
+console.log(`Balanced: ${ratios.balanced / 100}%`);
+console.log(`Aggressive: ${ratios.aggressive / 100}%`);
 ```
 
 ## APY Management

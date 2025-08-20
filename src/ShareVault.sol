@@ -12,6 +12,14 @@ interface IWKaia {
     function withdraw(uint256) external;
 }
 
+interface IVaultCore {
+    function handleDeposit(uint256 amount, address depositor) external returns (bool);
+    function handleDepositKAIA() external payable returns (bool);
+    function handleWithdraw(uint256 amount, address owner) external returns (uint256);
+    function handleRedeem(uint256 shares, address owner) external returns (uint256);
+    function totalAssets() external view returns (uint256);
+}
+
 /**
  * @title ShareVault
  * @dev ERC-4626 implementation for share management
@@ -109,23 +117,17 @@ contract ShareVault is ERC4626Upgradeable, OwnableUpgradeable, ReentrancyGuardUp
         // Pull WKAIA from user to ShareVault
         IERC20(asset()).transferFrom(msg.sender, address(this), assets);
         
-        // Check balances to create state sync delay
-        uint256 shareVaultWKAIA = IERC20(asset()).balanceOf(address(this));
-        require(shareVaultWKAIA >= assets, "WKAIA not received");
-        
-        // Convert WKAIA to KAIA in ShareVault to avoid state sync issue
-        IWKaia(asset()).withdraw(assets);
+        // Transfer WKAIA to VaultCore
+        IERC20(asset()).transfer(vaultCore, assets);
         
         // Update tracking
         lastDepositBlock[msg.sender] = block.number;
         deposits[msg.sender].amount += assets;
         deposits[msg.sender].timestamp = block.timestamp;
         
-        // Send KAIA to VaultCore instead of WKAIA
-        (bool success,) = vaultCore.call{value: assets}(
-            abi.encodeWithSignature("handleDepositKAIA()")
-        );
-        require(success, "Core KAIA deposit failed");
+        // Call VaultCore to handle deposit
+        bool success = IVaultCore(vaultCore).handleDeposit(assets, msg.sender);
+        require(success, "Core deposit failed");
         
         // Mint shares
         _mint(receiver, shares);

@@ -9,6 +9,7 @@ import {IWKaia} from "./interfaces/IWKaia.sol";
 import {TokenInfo} from "./interfaces/ITokenInfo.sol";
 import {SwapContract} from "./SwapContract.sol";
 import {IBalancerVault, IAsset} from "./interfaces/IBalancerVault.sol";
+import {IBalancerVaultExtended} from "./interfaces/IBalancerVaultExtended.sol";
 import {IWrappedLST} from "./interfaces/IWrappedLST.sol";
 import {IKoKaia} from "./interfaces/IKoKaia.sol";
 import {SharedStorage} from "./SharedStorage.sol";
@@ -37,6 +38,8 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
     event DirectDepositFrom(address indexed depositor, uint256 amount);
     event WrappedUnstake(address indexed user, uint256 indexed lstIndex, uint256 amount);
     event Claimed(address indexed user, uint256 indexed lstIndex, uint256 amount);
+    event LiquidityAdded(uint256 indexed lstIndex, uint256 tokenAmount, uint256 lpReceived);
+    event LiquidityRemoved(uint256 indexed lstIndex, uint256 lpAmount, uint256 tokenReceived);
     
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -60,6 +63,11 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
         swapContract = _swapContract;
         investRatio = _investRatio;
         slippage = 1000; // 10% default slippage
+        
+        // Set default ratios - no LP creation initially
+        // Can be changed later via setInvestmentRatios
+        balancedRatio = 0;    // 0% of LSTs go to pool1
+        aggressiveRatio = 0;  // 0% of LSTs go to pool2
         
         _initTokenInfo();
     }
@@ -115,6 +123,7 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
     
     /**
      * @dev Initialize token information for testnet (Kairos)
+     * Simplified structure - all LSTs use the same pools and tokenB
      */
     function _initTestnet() private {
         address[4] memory handlers = [
@@ -136,34 +145,21 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
             0x45886b01276c45Fe337d3758b94DD8D7F3951d97
         ];
         
-        // Correct pool IDs from KommuneVaultV2 _initTestnet()
-        bytes32 pool1_wKoKAIA = 0x8193fe745f2784b1f55e51f71145d2b8b0739b8100020000000000000000000e;
-        bytes32 pool2_wKoKAIA = 0x0c5da2fa11fc2d7eee16c06740072e3c5e1bb4a7000200000000000000000001;
-        bytes32 pool1_other = 0x7a665fb838477cbf719f5f34af4b7c1faebb7112000100000000000000000014;
-        bytes32 pool2_other = 0x0c5da2fa11fc2d7eee16c06740072e3c5e1bb4a7000200000000000000000001;
+        // Simplified structure - same pools and tokenB for all LSTs
+        bytes32 pool1 = 0xcc163330e85c34788840773e32917e2f51878b95000000000000000000000015;
+        bytes32 pool2 = 0x6634d606f477a7fb14159839a9b7ad9ad4295436000000000000000000000016;
+        address tokenB = 0xCC163330E85C34788840773E32917E2F51878B95; // Common intermediate token
         
-        // Set correct pools for each LST
-        // wKoKAIA (index 0) uses different pool1 but same tokenB as others
-        tokensInfo[0] = TokenInfo(
-            handlers[0], 
-            assets[0], 
-            tokenAs[0], 
-            0x985acD34f36D91768aD4b0cB295Aa919A7ABDb27, 
-            wkaia, 
-            pool1_wKoKAIA, 
-            pool2_wKoKAIA
-        );
-        
-        // wGCKAIA, wstKLAY, stKAIA (indices 1-3) use the same pools
-        for (uint256 i = 1; i < 4; i++) {
+        // Set the same pools for all LSTs
+        for (uint256 i = 0; i < 4; i++) {
             tokensInfo[i] = TokenInfo(
                 handlers[i], 
                 assets[i], 
                 tokenAs[i], 
-                0x985acD34f36D91768aD4b0cB295Aa919A7ABDb27, 
-                wkaia, 
-                pool1_other, 
-                pool2_other
+                tokenB,     // Same tokenB for all
+                wkaia,      // tokenC is always WKAIA
+                pool1,      // Same pool1 for all
+                pool2       // Same pool2 for all
             );
         }
     }
@@ -176,65 +172,49 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
         total = address(this).balance;
         
         // WKAIA balance
-        total += IERC20(wkaia).balanceOf(address(this));
+        if (wkaia != address(0)) {
+            total += IERC20(wkaia).balanceOf(address(this));
+        }
         
-        // Add LST balances (converted to WKAIA value)
+        // Add LST balances (simplified to avoid revert)
         for (uint256 i = 0; i < 4; i++) {
-            uint256 lstBalance = 0;
-            
-            if (i < 3) {
-                // For LSTs with separate wrapped versions (index 0-2)
-                // Count both unwrapped and wrapped balances
-                lstBalance = IERC20(tokensInfo[i].asset).balanceOf(address(this));
-                uint256 wrappedBalance = IERC20(tokensInfo[i].tokenA).balanceOf(address(this));
-                lstBalance += wrappedBalance;
-            } else {
-                // For stKAIA (index 3), asset and tokenA are the same
-                // Only count once to avoid duplication
-                lstBalance = IERC20(tokensInfo[i].asset).balanceOf(address(this));
+            // Skip if token info not initialized
+            if (tokensInfo[i].handler == address(0)) {
+                continue;
             }
             
-            // For now, assume 1:1 ratio for LST to KAIA/WKAIA
-            // In production, this should use actual exchange rates from oracles or pools
+            uint256 lstBalance = 0;
+            
+            // Get wrapped token balance (tokenA)
+            if (tokensInfo[i].tokenA != address(0)) {
+                try IERC20(tokensInfo[i].tokenA).balanceOf(address(this)) returns (uint256 balance) {
+                    lstBalance += balance;
+                } catch {
+                    // Skip if balance call fails
+                }
+            }
+            
+            // For LSTs with separate unwrapped version (not stKAIA)
+            if (i < 3 && tokensInfo[i].asset != tokensInfo[i].tokenA) {
+                try IERC20(tokensInfo[i].asset).balanceOf(address(this)) returns (uint256 balance) {
+                    lstBalance += balance;
+                } catch {
+                    // Skip if balance call fails
+                }
+            }
+            
+            // Add LP token value if exists
+            if (lpBalances[i] > 0 && lpTokens[i] != address(0)) {
+                // For now, just add the LP balance directly
+                // In production, this should calculate actual underlying value
+                lstBalance += lpBalances[i];
+            }
+            
+            // Add to total (1:1 ratio assumed for now)
             total += lstBalance;
         }
         
         return total;
-    }
-    
-    /**
-     * @dev Handle direct deposit where WKAIA is already in VaultCore
-     * This avoids the ShareVault -> VaultCore transfer and state sync issues
-     * @param amount Amount of WKAIA already received
-     * @param depositor The address of the original depositor
-     */
-    function handleDirectDeposit(uint256 amount, address depositor) public returns (bool) {
-        require(msg.sender == shareVault, "Only ShareVault");
-        require(amount > 0, "Zero amount");
-        
-        // WKAIA is already here, just verify balance
-        uint256 wkaiaBalance = IERC20(wkaia).balanceOf(address(this));
-        require(wkaiaBalance >= amount, "Insufficient WKAIA");
-        
-        // Calculate amount to stake
-        uint256 amountToStake = (amount * investRatio) / 10000;
-        
-        if (amountToStake > 0) {
-            // Direct balance check - no transfer just happened, state should be stable
-            require(wkaiaBalance >= amountToStake, "Insufficient WKAIA for stake");
-            
-            // Unwrap WKAIA to KAIA for staking
-            IWKaia(wkaia).withdraw(amountToStake);
-            
-            // Distribute to LSTs based on APY
-            _distributToLSTs(amountToStake);
-            
-            emit StakeExecuted(amountToStake);
-        }
-        
-        emit AssetsDeposited(amount);
-        emit DirectDepositFrom(depositor, amount);
-        return true;
     }
     
     /**
@@ -251,19 +231,28 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
         uint256 wkaiaBalance = IERC20(wkaia).balanceOf(address(this));
         require(wkaiaBalance >= amount, "Insufficient WKAIA");
         
-        // Calculate amount to stake
-        uint256 amountToStake = (amount * investRatio) / 10000;
+        // Calculate total amount to invest based on investRatio
+        uint256 amountToInvest = (amount * investRatio) / 10000;
         
-        if (amountToStake > 0) {
-            require(wkaiaBalance >= amountToStake, "Insufficient WKAIA for stake");
+        if (amountToInvest > 0) {
+            require(wkaiaBalance >= amountToInvest, "Insufficient WKAIA for investment");
             
-            // Unwrap WKAIA to KAIA for staking
-            IWKaia(wkaia).withdraw(amountToStake);
+            // Unwrap WKAIA to KAIA for investment
+            IWKaia(wkaia).withdraw(amountToInvest);
             
-            // Distribute to LSTs based on APY
-            _distributToLSTs(amountToStake);
+            // First invest all to get LSTs
+            _processInvestment(amountToInvest, false);  // false = don't add to pool yet
             
-            emit StakeExecuted(amountToStake);
+            // Then add portion of LSTs to pools if configured
+            if (balancedRatio > 0) {
+                _addLSTsToPool1(balancedRatio);
+            }
+            
+            if (aggressiveRatio > 0) {
+                _addLSTsToPool2(aggressiveRatio);
+            }
+            
+            emit StakeExecuted(amountToInvest);
         }
         
         emit AssetsDeposited(amount);
@@ -277,25 +266,34 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
         require(msg.sender == shareVault, "Only ShareVault");
         require(msg.value > 0, "Zero amount");
         
-        uint256 amount = msg.value;
+        uint256 kaiaAmount = msg.value;
         
-        // Calculate amount to stake
-        uint256 amountToStake = (amount * investRatio) / 10000;
-        uint256 amountToWrap = amount - amountToStake;
+        // Calculate amount to invest (e.g., 90% of deposit)
+        uint256 amountToInvest = (kaiaAmount * investRatio) / 10000;
         
-        if (amountToStake > 0) {
-            // Distribute to LSTs based on APY
-            _distributToLSTs(amountToStake);
+        if (amountToInvest > 0) {
+            // First invest all to get LSTs
+            _processInvestment(amountToInvest, false);  // false = don't add to pool yet
             
-            emit StakeExecuted(amountToStake);
+            // Then add portion of LSTs to pools if configured
+            if (balancedRatio > 0) {
+                _addLSTsToPool1(balancedRatio);
+            }
+            
+            if (aggressiveRatio > 0) {
+                _addLSTsToPool2(aggressiveRatio);
+            }
+            
+            emit StakeExecuted(amountToInvest);
         }
         
-        // Wrap remaining KAIA to WKAIA
-        if (amountToWrap > 0) {
-            IWKaia(wkaia).deposit{value: amountToWrap}();
+        // Wrap remaining KAIA to WKAIA for liquidity
+        uint256 remainingAmount = kaiaAmount - amountToInvest;
+        if (remainingAmount > 0) {
+            IWKaia(wkaia).deposit{value: remainingAmount}();
         }
         
-        emit KAIADeposited(amount);
+        emit KAIADeposited(kaiaAmount);
         return true;
     }
     
@@ -446,6 +444,146 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
         }
     }
     
+    /**
+     * @dev Process investment based on strategy (internal helper)
+     * @param kaiaAmount Amount of KAIA to invest
+     * @param addToPool If true, add received LSTs to Balancer pools (for balanced strategy)
+     */
+    function _processInvestment(uint256 kaiaAmount, bool addToPool) private {
+        // Distribute KAIA to LSTs based on APY
+        _distributToLSTs(kaiaAmount);
+        
+        // For balanced strategy, add received LSTs to pools
+        if (addToPool) {
+            for (uint256 i = 0; i < 4; i++) {
+                if (lstAPY[i] > 0) {
+                    _addLiquidityToPool(i);
+                }
+            }
+        }
+    }
+    
+    /**
+     * @dev Add portion of all LSTs to pool1 in a single transaction
+     * @param ratio Percentage of LSTs to add (in basis points, e.g., 5000 = 50%)
+     */
+    function _addLSTsToPool1(uint256 ratio) private {
+        // Based on tx analysis, the pool expects these tokens in sorted order:
+        // [0]: 0x324353670B23b16DFacBDE169Cd8ebF8C8bf6601 (wGCKAIA)
+        // [1]: 0x45886b01276c45Fe337d3758b94DD8D7F3951d97 (stKAIA)
+        // [2]: 0x474B49DF463E528223F244670e332fE82742e1aA (wstKLAY)
+        // [3]: 0x9a93e2fcDEBE43d0f8205D1cd255D709B7598317 (wKoKAIA)
+        // [4]: 0xCC163330E85C34788840773E32917E2F51878B95 (BPT/tokenB - amount is 0)
+        
+        // Prepare arrays for joinPool
+        IAsset[] memory assets = new IAsset[](5);
+        uint256[] memory maxAmountsIn = new uint256[](5);
+        bool hasLiquidity = false;
+        
+        // Set assets in the exact order from the transaction
+        assets[0] = IAsset(tokensInfo[1].tokenA); // wGCKAIA (LST index 1)
+        assets[1] = IAsset(tokensInfo[3].tokenA); // stKAIA  (LST index 3)
+        assets[2] = IAsset(tokensInfo[2].tokenA); // wstKLAY (LST index 2)
+        assets[3] = IAsset(tokensInfo[0].tokenA); // wKoKAIA (LST index 0)
+        assets[4] = IAsset(tokensInfo[0].tokenB); // BPT/tokenB
+        
+        // Calculate and set amounts for each LST
+        uint256[4] memory lstBalances;
+        for (uint256 i = 0; i < 4; i++) {
+            lstBalances[i] = IERC20(tokensInfo[i].tokenA).balanceOf(address(this));
+        }
+        
+        // Set maxAmountsIn in the correct order
+        if (lstBalances[1] > 0 && lstAPY[1] > 0) { // wGCKAIA
+            maxAmountsIn[0] = (lstBalances[1] * ratio) / 10000;
+            if (maxAmountsIn[0] > 0) {
+                hasLiquidity = true;
+                IERC20(tokensInfo[1].tokenA).approve(balancerVault, maxAmountsIn[0]);
+            }
+        }
+        
+        if (lstBalances[3] > 0 && lstAPY[3] > 0) { // stKAIA
+            maxAmountsIn[1] = (lstBalances[3] * ratio) / 10000;
+            if (maxAmountsIn[1] > 0) {
+                hasLiquidity = true;
+                IERC20(tokensInfo[3].tokenA).approve(balancerVault, maxAmountsIn[1]);
+            }
+        }
+        
+        if (lstBalances[2] > 0 && lstAPY[2] > 0) { // wstKLAY
+            maxAmountsIn[2] = (lstBalances[2] * ratio) / 10000;
+            if (maxAmountsIn[2] > 0) {
+                hasLiquidity = true;
+                IERC20(tokensInfo[2].tokenA).approve(balancerVault, maxAmountsIn[2]);
+            }
+        }
+        
+        if (lstBalances[0] > 0 && lstAPY[0] > 0) { // wKoKAIA
+            maxAmountsIn[3] = (lstBalances[0] * ratio) / 10000;
+            if (maxAmountsIn[3] > 0) {
+                hasLiquidity = true;
+                IERC20(tokensInfo[0].tokenA).approve(balancerVault, maxAmountsIn[3]);
+            }
+        }
+        
+        maxAmountsIn[4] = 0; // BPT - always 0
+        
+        // Only proceed if we have liquidity to add
+        if (hasLiquidity) {
+            // Use pool1 from tokensInfo[0] (all LSTs use same pool1 now)
+            bytes32 poolId = tokensInfo[0].pool1;
+            
+            // Prepare JoinPoolRequest
+            // userData needs only the first 4 amounts (LSTs), not the BPT
+            uint256[] memory amountsForUserData = new uint256[](4);
+            amountsForUserData[0] = maxAmountsIn[0]; // wGCKAIA
+            amountsForUserData[1] = maxAmountsIn[1]; // stKAIA
+            amountsForUserData[2] = maxAmountsIn[2]; // wstKLAY
+            amountsForUserData[3] = maxAmountsIn[3]; // wKoKAIA
+            
+            IBalancerVaultExtended.JoinPoolRequest memory request = IBalancerVaultExtended.JoinPoolRequest({
+                assets: assets,
+                maxAmountsIn: maxAmountsIn,
+                userData: abi.encode(1, amountsForUserData, 0), // JOIN_KIND_EXACT_TOKENS_IN_FOR_BPT_OUT = 1
+                fromInternalBalance: false
+            });
+            
+            // Get BPT balance before joinPool
+            uint256 bptBefore = IERC20(tokensInfo[0].tokenB).balanceOf(address(this));
+            
+            // Join the pool and receive LP tokens
+            IBalancerVaultExtended(balancerVault).joinPool(
+                poolId,
+                address(this), // sender
+                address(this), // recipient
+                request
+            );
+            
+            // Get BPT balance after joinPool and calculate received amount
+            uint256 bptAfter = IERC20(tokensInfo[0].tokenB).balanceOf(address(this));
+            uint256 bptReceived = bptAfter - bptBefore;
+            
+            // Store LP token info (all LSTs share the same pool and BPT)
+            if (bptReceived > 0) {
+                lpTokens[0] = tokensInfo[0].tokenB; // Store BPT address
+                lpBalances[0] = bptAfter; // Store total BPT balance
+                
+                // Emit event with total LST amount and BPT received
+                uint256 totalLSTAmount = maxAmountsIn[0] + maxAmountsIn[1] + maxAmountsIn[2] + maxAmountsIn[3];
+                emit LiquidityAdded(0, totalLSTAmount, bptReceived);
+            }
+        }
+    }
+    
+    /**
+     * @dev Add portion of LSTs to pool2 for aggressive LP tokens (future)
+     * @param ratio Percentage of LSTs to add (in basis points)
+     */
+    function _addLSTsToPool2(uint256 ratio) private {
+        // Future implementation for pool2
+        // For now, keep LSTs as is
+    }
+    
     
     // Admin functions
     
@@ -480,6 +618,39 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
     function setClaimManager(address _claimManager) external onlyOwner {
         require(_claimManager != address(0), "Invalid address");
         claimManager = _claimManager;
+    }
+    
+    /**
+     * @dev Set investment strategy ratios
+     * @param _investRatio How much of deposits go to LST staking (e.g., 9000 = 90%)
+     * @param _balancedRatio % of LSTs to add to pool1 (e.g., 5000 = 50%)
+     * @param _aggressiveRatio % of LSTs to add to pool2 (e.g., 5000 = 50%)
+     */
+    function setInvestmentRatios(
+        uint256 _investRatio,
+        uint256 _balancedRatio,
+        uint256 _aggressiveRatio
+    ) external onlyOwner {
+        require(_investRatio <= 10000, "Invest ratio exceeds 100%");
+        require(_balancedRatio + _aggressiveRatio <= 10000, "LP ratios exceed 100%");
+        
+        investRatio = _investRatio;
+        balancedRatio = _balancedRatio;
+        aggressiveRatio = _aggressiveRatio;
+    }
+    
+    /**
+     * @dev Get current investment ratios
+     * @return invest Overall investment ratio (% of deposits to invest in LSTs)
+     * @return balanced % of LSTs to add to pool1 for LP tokens
+     * @return aggressive % of LSTs to add to pool2 for LP tokens
+     */
+    function getInvestmentRatios() external view returns (
+        uint256 invest,
+        uint256 balanced,
+        uint256 aggressive
+    ) {
+        return (investRatio, balancedRatio, aggressiveRatio);
     }
     
     /**
@@ -617,6 +788,280 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
         return abi.decode(data, (uint256));
     }
     
+    /**
+     * @dev Add liquidity to Balancer pool for a specific LST
+     * @param lstIndex Index of the LST (0-3)
+     */
+    function _addLiquidityToPool(uint256 lstIndex) private {
+        TokenInfo memory info = tokensInfo[lstIndex];
+        
+        // Get wrapped token balance
+        uint256 tokenBalance = IERC20(info.tokenA).balanceOf(address(this));
+        if (tokenBalance == 0) return;
+        
+        // Prepare assets array for pool1
+        IAsset[] memory assets = new IAsset[](2);
+        assets[0] = IAsset(info.tokenA);  // Wrapped LST token
+        assets[1] = IAsset(info.tokenB);  // Intermediate token
+        
+        // Prepare amounts - we're providing only tokenA
+        uint256[] memory maxAmountsIn = new uint256[](2);
+        maxAmountsIn[0] = tokenBalance;
+        maxAmountsIn[1] = 0; // We're doing single-sided liquidity
+        
+        // Encode userData for EXACT_TOKENS_IN_FOR_BPT_OUT
+        // JOIN_KIND = 1, amountsIn array, minimumBPT
+        uint256[] memory amountsIn = new uint256[](2);
+        amountsIn[0] = tokenBalance;
+        amountsIn[1] = 0;
+        uint256 minimumBPT = 0; // Accept any amount of LP tokens
+        
+        bytes memory userData = abi.encode(
+            IBalancerVaultExtended.JoinKind.EXACT_TOKENS_IN_FOR_BPT_OUT,
+            amountsIn,
+            minimumBPT
+        );
+        
+        // Approve Balancer Vault to spend our tokens
+        IERC20(info.tokenA).approve(balancerVault, tokenBalance);
+        
+        // Get LP token address before join
+        (address[] memory poolTokens, , ) = IBalancerVaultExtended(balancerVault).getPoolTokens(info.pool1);
+        address lpToken = _findLPToken(poolTokens, info.tokenA, info.tokenB);
+        uint256 lpBefore = lpToken != address(0) ? IERC20(lpToken).balanceOf(address(this)) : 0;
+        
+        // Join the pool
+        IBalancerVaultExtended.JoinPoolRequest memory request = IBalancerVaultExtended.JoinPoolRequest({
+            assets: assets,
+            maxAmountsIn: maxAmountsIn,
+            userData: userData,
+            fromInternalBalance: false
+        });
+        
+        IBalancerVaultExtended(balancerVault).joinPool(
+            info.pool1,
+            address(this),
+            address(this),
+            request
+        );
+        
+        // Track LP tokens received
+        uint256 lpAfter = lpToken != address(0) ? IERC20(lpToken).balanceOf(address(this)) : 0;
+        uint256 lpReceived = lpAfter - lpBefore;
+        
+        if (lpReceived > 0) {
+            lpBalances[lstIndex] += lpReceived;
+            lpTokens[lstIndex] = lpToken;
+            emit LiquidityAdded(lstIndex, tokenBalance, lpReceived);
+        }
+    }
+    
+    /**
+     * @dev Remove liquidity from Balancer pool (owner only)
+     * @param lstIndex Index of the LST (0-3)
+     * @param lpAmount Amount of LP tokens to remove
+     */
+    function removeLiquidity(uint256 lstIndex, uint256 lpAmount) external onlyOwner {
+        require(lstIndex < 4, "Invalid LST index");
+        require(lpAmount > 0, "Zero amount");
+        require(lpBalances[lstIndex] >= lpAmount, "Insufficient LP balance");
+        
+        // Use same assets array as joinPool (5 tokens)
+        IAsset[] memory assets = new IAsset[](5);
+        assets[0] = IAsset(tokensInfo[1].tokenA); // wGCKAIA
+        assets[1] = IAsset(tokensInfo[3].tokenA); // stKAIA
+        assets[2] = IAsset(tokensInfo[2].tokenA); // wstKLAY
+        assets[3] = IAsset(tokensInfo[0].tokenA); // wKoKAIA
+        assets[4] = IAsset(tokensInfo[0].tokenB); // BPT
+        
+        // Minimum amounts out (0 = accept any amount)
+        uint256[] memory minAmountsOut = new uint256[](5);
+        // All zeros - accept any amount
+        
+        // Encode userData for EXACT_BPT_IN_FOR_ONE_TOKEN_OUT
+        // ExitKind = 0, bptAmountIn, exitTokenIndex
+        // We exit to the token that matches lstIndex
+        uint256 exitTokenIndex;
+        if (lstIndex == 0) exitTokenIndex = 3;      // wKoKAIA is at index 3
+        else if (lstIndex == 1) exitTokenIndex = 0;  // wGCKAIA is at index 0
+        else if (lstIndex == 2) exitTokenIndex = 2;  // wstKLAY is at index 2
+        else exitTokenIndex = 1;                     // stKAIA is at index 1
+        
+        bytes memory userData = abi.encode(0, lpAmount, exitTokenIndex);
+        
+        // Approve BPT tokens for burning
+        IERC20(tokensInfo[0].tokenB).approve(balancerVault, lpAmount);
+        
+        // Track balances before exit
+        uint256[4] memory tokensBefore;
+        for (uint256 i = 0; i < 4; i++) {
+            tokensBefore[i] = IERC20(tokensInfo[i].tokenA).balanceOf(address(this));
+        }
+        
+        // Exit the pool
+        IBalancerVaultExtended.ExitPoolRequest memory request = IBalancerVaultExtended.ExitPoolRequest({
+            assets: assets,
+            minAmountsOut: minAmountsOut,
+            userData: userData,
+            toInternalBalance: false
+        });
+        
+        IBalancerVaultExtended(balancerVault).exitPool(
+            tokensInfo[0].pool1,  // Use pool1 from tokensInfo[0]
+            address(this),
+            payable(address(this)),
+            request
+        );
+        
+        // Calculate tokens received for the specific LST
+        uint256 tokenAfter = IERC20(tokensInfo[lstIndex].tokenA).balanceOf(address(this));
+        uint256 totalReceived = tokenAfter - tokensBefore[lstIndex];
+        
+        // Update LP balance
+        lpBalances[lstIndex] -= lpAmount;
+        
+        emit LiquidityRemoved(lstIndex, lpAmount, totalReceived);
+    }
+    
+    /**
+     * @dev Add liquidity manually for a specific LST (owner only)
+     * This allows adding liquidity outside of the investment flow
+     * @param lstIndex Index of the LST (0-3)
+     * @param amount Amount of wrapped LST tokens to add as liquidity
+     */
+    function addLiquidityManual(uint256 lstIndex, uint256 amount) external onlyOwner {
+        require(lstIndex < 4, "Invalid LST index");
+        require(amount > 0, "Zero amount");
+        
+        TokenInfo memory info = tokensInfo[lstIndex];
+        uint256 balance = IERC20(info.tokenA).balanceOf(address(this));
+        require(balance >= amount, "Insufficient balance");
+        
+        _addLiquidityToPool(lstIndex);
+    }
+    
+    /**
+     * @dev Get LP token balance for a specific LST
+     * @param lstIndex Index of the LST (0-3)
+     * @return lpBalance Amount of LP tokens held
+     * @return lpToken Address of the LP token
+     */
+    function getLPInfo(uint256 lstIndex) external view returns (uint256 lpBalance, address lpToken) {
+        require(lstIndex < 4, "Invalid LST index");
+        return (lpBalances[lstIndex], lpTokens[lstIndex]);
+    }
+    
+    /**
+     * @dev Helper function to find LP token from pool tokens
+     */
+    function _findLPToken(
+        address[] memory poolTokens,
+        address tokenA,
+        address tokenB
+    ) private pure returns (address) {
+        // The LP token is the one that's not tokenA or tokenB
+        for (uint256 i = 0; i < poolTokens.length; i++) {
+            if (poolTokens[i] != tokenA && poolTokens[i] != tokenB) {
+                return poolTokens[i];
+            }
+        }
+        return address(0);
+    }
+    
+    /**
+     * @dev Calculate the underlying LST value of LP tokens
+     * This calculates how much wrapped LST tokens would be received if LP tokens were removed
+     * @param lstIndex Index of the LST (0-3)
+     * @param lpAmount Amount of LP tokens to value
+     * @return underlyingAmount Amount of wrapped LST tokens the LP represents
+     */
+    function _calculateLPTokenValue(uint256 lstIndex, uint256 lpAmount) private view returns (uint256) {
+        if (lpAmount == 0 || lpTokens[lstIndex] == address(0)) {
+            return 0;
+        }
+        
+        TokenInfo memory info = tokensInfo[lstIndex];
+        address lpToken = lpTokens[lstIndex];
+        
+        // Get pool token balances and total supply
+        (address[] memory poolTokens, uint256[] memory balances, ) = 
+            IBalancerVaultExtended(balancerVault).getPoolTokens(info.pool1);
+        
+        // Find the index of our LST token in the pool
+        uint256 lstTokenIndex = type(uint256).max;
+        for (uint256 i = 0; i < poolTokens.length; i++) {
+            if (poolTokens[i] == info.tokenA) {
+                lstTokenIndex = i;
+                break;
+            }
+        }
+        
+        if (lstTokenIndex == type(uint256).max) {
+            return 0; // Token not found in pool
+        }
+        
+        // Get total LP token supply
+        uint256 totalLPSupply = IERC20(lpToken).totalSupply();
+        if (totalLPSupply == 0) {
+            return 0;
+        }
+        
+        // Calculate proportional share of the LST token in the pool
+        // underlyingAmount = (lpAmount * lstBalanceInPool) / totalLPSupply
+        uint256 lstBalanceInPool = balances[lstTokenIndex];
+        uint256 underlyingAmount = (lpAmount * lstBalanceInPool) / totalLPSupply;
+        
+        return underlyingAmount;
+    }
+    
+    /**
+     * @dev Get the calculated underlying value of LP tokens for a specific LST
+     * External view function for transparency
+     * @param lstIndex Index of the LST (0-3)
+     * @return underlyingValue Amount of wrapped LST the LP tokens represent
+     */
+    function getLPTokenValue(uint256 lstIndex) external view returns (uint256) {
+        require(lstIndex < 4, "Invalid LST index");
+        return _calculateLPTokenValue(lstIndex, lpBalances[lstIndex]);
+    }
+    
+    // ========== LP GETTER FUNCTIONS ==========
+    
+    /**
+     * @dev Get LP token balance for specific LST
+     * @param lstIndex Index of the LST (0-3)
+     * @return LP token balance
+     */
+    function getLPBalance(uint256 lstIndex) external view returns (uint256) {
+        require(lstIndex < 4, "Invalid LST index");
+        return lpBalances[lstIndex];
+    }
+    
+    /**
+     * @dev Get LP token address for specific LST
+     * @param lstIndex Index of the LST (0-3)
+     * @return LP token address
+     */
+    function getLPToken(uint256 lstIndex) external view returns (address) {
+        require(lstIndex < 4, "Invalid LST index");
+        return lpTokens[lstIndex];
+    }
+    
+    /**
+     * @dev Get comprehensive LP information for all LSTs
+     * @return balances Array of LP token balances
+     * @return tokens Array of LP token addresses
+     */
+    function getLPInfo() external view returns (uint256[] memory balances, address[] memory tokens) {
+        balances = new uint256[](4);
+        tokens = new address[](4);
+        
+        for (uint256 i = 0; i < 4; i++) {
+            balances[i] = lpBalances[i];
+            tokens[i] = lpTokens[i];
+        }
+    }
+
     // Required for UUPS
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
     

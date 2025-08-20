@@ -29,68 +29,48 @@ async function main() {
     console.log("❗ 모든 4개 LST에 대해 테스트 완료되었습니다.");
     console.log("❗ 정말로 업그레이드가 필요합니까?\n");
     
-    // Note: SwapContract is NOT upgradeable (not a proxy)
-    // This script is for deploying a NEW SwapContract if needed
-    
-    console.log("📦 새 SwapContract 배포 중...");
+    // SwapContract is now upgradeable (UUPS proxy)
+    console.log("📦 SwapContract 업그레이드 중...");
     
     try {
         const SwapContract = await ethers.getContractFactory("SwapContract");
         
-        // Deploy new SwapContract (not upgradeable)
-        const swapContract = await SwapContract.deploy();
+        // Upgrade the existing SwapContract proxy
+        const swapContract = await upgrades.upgradeProxy(
+            deployments.swapContract,
+            SwapContract,
+            { 
+                kind: 'uups',
+                redeployImplementation: 'always'
+            }
+        );
         await swapContract.waitForDeployment();
-        const newAddress = await swapContract.getAddress();
+        const proxyAddress = await swapContract.getAddress();
         
-        console.log(`  ✅ 새 SwapContract 배포: ${newAddress}`);
+        console.log(`  ✅ SwapContract 업그레이드 완료: ${proxyAddress}`);
         
-        // Set authorized caller to VaultCore
-        console.log("\n🔐 VaultCore 권한 설정 중...");
-        const tx = await swapContract.setAuthorizedCaller(deployments.vaultCore);
-        await tx.wait();
-        console.log(`  ✅ VaultCore 권한 설정 완료`);
+        // Verify the upgrade
+        console.log("\n🔍 업그레이드 검증 중...");
         
-        // Update VaultCore to use new SwapContract
-        console.log("\n🔄 VaultCore에 새 SwapContract 연결 중...");
-        const vaultCore = await ethers.getContractAt("VaultCore", deployments.vaultCore);
-        const updateTx = await vaultCore.setSwapContract(newAddress);
-        await updateTx.wait();
-        console.log(`  ✅ VaultCore 업데이트 완료`);
+        // Check owner
+        const owner = await swapContract.owner();
+        console.log(`  Owner: ${owner}`);
+        console.log(`  Match: ${owner === deployer.address ? '✅' : '❌'}`);
         
-        // Verify the update
-        const currentSwap = await vaultCore.swapContract();
-        if (currentSwap === newAddress) {
-            console.log("  ✅ 연결 확인 완료");
-        } else {
-            console.log("  ❌ 연결 실패!");
-            process.exit(1);
-        }
+        // Note: When upgrading a UUPS proxy, the address remains the same
+        console.log("\n✅ SwapContract 업그레이드가 성공적으로 완료되었습니다.");
+        console.log("   (프록시 주소는 변경되지 않으므로 VaultCore 업데이트 불필요)");
         
-        // Update deployment file
-        const oldAddress = deployments.swapContract;
-        deployments.swapContract = newAddress;
-        deployments.swapContractOld = oldAddress;
+        // Update deployment file with timestamp
         deployments.lastSwapContractUpdate = new Date().toISOString();
         
         fs.writeFileSync(deploymentFile, JSON.stringify(deployments, null, 2));
+        console.log(`  ✅ ${deploymentFile} 타임스탬프 업데이트 완료`);
         
-        console.log("\n✅ SwapContract 교체 완료!");
-        console.log(`  이전 주소: ${oldAddress}`);
-        console.log(`  새 주소: ${newAddress}`);
-        
-        console.log("\n📝 다음 단계:");
-        console.log("  1. testIntegrated.js로 기능 테스트");
-        console.log("  2. 모든 4개 LST swap 테스트");
-        console.log("  3. 가스 사용량 확인");
+        console.log("\n✅ 모든 작업 완료!");
         
     } catch (error) {
-        console.error("\n❌ SwapContract 교체 실패:");
-        console.error(error.message);
-        
-        if (error.message.includes("Ownable")) {
-            console.error("\n💡 힌트: VaultCore owner 권한이 필요합니다.");
-        }
-        
+        console.error("❌ 업그레이드 실패:", error);
         process.exit(1);
     }
 }
