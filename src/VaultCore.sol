@@ -204,10 +204,11 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
             }
             
             // Add LP token value if exists
+            // Calculate the underlying LST value of LP tokens
             if (lpBalances[i] > 0 && lpTokens[i] != address(0)) {
-                // For now, just add the LP balance directly
-                // In production, this should calculate actual underlying value
-                lstBalance += lpBalances[i];
+                // Calculate the actual underlying LST value of LP tokens
+                uint256 lpValue = _calculateLPTokenValue(i, lpBalances[i]);
+                lstBalance += lpValue;
             }
             
             // Add to total (1:1 ratio assumed for now)
@@ -953,24 +954,22 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
     
     /**
      * @dev Helper function to find LP token from pool tokens
+     * Note: For Balancer pools, tokenB IS the BPT (LP token)
      */
     function _findLPToken(
         address[] memory poolTokens,
         address tokenA,
         address tokenB
     ) private pure returns (address) {
-        // The LP token is the one that's not tokenA or tokenB
-        for (uint256 i = 0; i < poolTokens.length; i++) {
-            if (poolTokens[i] != tokenA && poolTokens[i] != tokenB) {
-                return poolTokens[i];
-            }
-        }
-        return address(0);
+        // For our setup, tokenB is actually the BPT (LP token)
+        // So we just return tokenB directly
+        return tokenB;
     }
     
     /**
      * @dev Calculate the underlying LST value of LP tokens
      * This calculates how much wrapped LST tokens would be received if LP tokens were removed
+     * For Balancer Composable Stable Pools, we need to use circulating supply
      * @param lstIndex Index of the LST (0-3)
      * @param lpAmount Amount of LP tokens to value
      * @return underlyingAmount Amount of wrapped LST tokens the LP represents
@@ -987,12 +986,16 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
         (address[] memory poolTokens, uint256[] memory balances, ) = 
             IBalancerVaultExtended(balancerVault).getPoolTokens(info.pool1);
         
-        // Find the index of our LST token in the pool
+        // Find the index of our LST token and BPT in the pool
         uint256 lstTokenIndex = type(uint256).max;
+        uint256 bptIndex = type(uint256).max;
+        
         for (uint256 i = 0; i < poolTokens.length; i++) {
             if (poolTokens[i] == info.tokenA) {
                 lstTokenIndex = i;
-                break;
+            }
+            if (poolTokens[i] == lpToken) {
+                bptIndex = i;
             }
         }
         
@@ -1006,10 +1009,37 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
             return 0;
         }
         
-        // Calculate proportional share of the LST token in the pool
-        // underlyingAmount = (lpAmount * lstBalanceInPool) / totalLPSupply
+        // For Composable Stable Pools, use circulating supply
+        // Circulating supply = Total supply - Pool's BPT balance
+        uint256 circulatingSupply = totalLPSupply;
+        if (bptIndex != type(uint256).max) {
+            // Pool holds BPT, so subtract it from total supply
+            circulatingSupply = totalLPSupply - balances[bptIndex];
+            if (circulatingSupply == 0) {
+                return 0;
+            }
+        }
+        
+        // For accurate valuation, we should try to get actualSupply from the pool
+        // Try to call getActualSupply() on the BPT token (which is the pool contract)
+        uint256 actualSupply = circulatingSupply;
+        
+        // Try to get actual supply from the pool contract
+        (bool success, bytes memory data) = lpToken.staticcall(
+            abi.encodeWithSignature("getActualSupply()")
+        );
+        
+        if (success && data.length >= 32) {
+            uint256 poolActualSupply = abi.decode(data, (uint256));
+            if (poolActualSupply > 0) {
+                actualSupply = poolActualSupply;
+            }
+        }
+        
+        // Calculate proportional share of the LST in the pool
+        // For Composable Stable Pools, this gives us the underlying value
         uint256 lstBalanceInPool = balances[lstTokenIndex];
-        uint256 underlyingAmount = (lpAmount * lstBalanceInPool) / totalLPSupply;
+        uint256 underlyingAmount = (lpAmount * lstBalanceInPool) / actualSupply;
         
         return underlyingAmount;
     }
@@ -1023,6 +1053,18 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
     function getLPTokenValue(uint256 lstIndex) external view returns (uint256) {
         require(lstIndex < 4, "Invalid LST index");
         return _calculateLPTokenValue(lstIndex, lpBalances[lstIndex]);
+    }
+    
+    /**
+     * @dev Calculate the underlying value of a specific amount of LP tokens
+     * External view function for transparency
+     * @param lstIndex Index of the LST (0-3)
+     * @param lpAmount Amount of LP tokens to value
+     * @return underlyingValue Amount of wrapped LST the LP tokens represent
+     */
+    function calculateLPTokenValue(uint256 lstIndex, uint256 lpAmount) external view returns (uint256) {
+        require(lstIndex < 4, "Invalid LST index");
+        return _calculateLPTokenValue(lstIndex, lpAmount);
     }
     
     // ========== LP GETTER FUNCTIONS ==========

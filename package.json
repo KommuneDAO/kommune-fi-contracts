@@ -10,6 +10,7 @@
     "test": "hardhat test",
     
     "// === V2 DEPLOYMENT (CURRENT) - TESTNET ===": "",
+    "deploy:v1:testnet": "hardhat run ./scripts/deploy.js --network kairos",
     "deploy:testnet": "hardhat run ./scripts/deployFresh.js --network kairos",
     "upgrade:testnet": "hardhat run ./scripts/upgradeVaultCore.js --network kairos",
     "upgrade:testnet:all": "hardhat run ./scripts/upgradeAll.js --network kairos",
@@ -23,6 +24,7 @@
     "test:mainnet": "hardhat run ./scripts/testIntegrated.js --network kaia",
     
     "// === V2 DEPLOYMENT (CURRENT) - MAINNET ===": "",
+    "deploy:v1:mainnet": "hardhat run ./scripts/deploy.js --network kaia",
     "deploy:mainnet": "hardhat run ./scripts/deployFresh.js --network kaia",
     "upgrade:mainnet": "hardhat run ./scripts/upgradeVaultCore.js --network kaia",
     "upgrade:mainnet:all": "hardhat run ./scripts/upgradeAll.js --network kaia",

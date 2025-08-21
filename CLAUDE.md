@@ -589,6 +589,39 @@ require(block.number > lastDepositBlock[msg.sender], "Same block");
 - Same-block attempts: Still blocked by per-block limit
 - Recommendation: Keep for now, review later
 
+### LP Token Valuation in totalAssets (2025-08-21)
+
+**✅ IMPLEMENTED: LP token values are now correctly included in totalAssets calculation**
+
+#### Background:
+- **Issue**: LP tokens from Balancer pools were not being valued correctly in totalAssets
+- **Challenge**: Balancer Composable Stable Pools have pre-minted BPT with most tokens held by the pool itself
+- **Solution**: Use `getActualSupply()` from the pool contract for accurate valuation
+
+#### Technical Details:
+1. **Composable Stable Pool Structure**:
+   - Total BPT supply: ~2.6 quadrillion tokens
+   - Pool holds: ~2.6 quadrillion tokens (pre-minted)
+   - Circulating supply: ~343 tokens (actual liquidity)
+
+2. **Correct Calculation Method**:
+   ```solidity
+   // Use getActualSupply() for accurate circulating supply
+   uint256 actualSupply = pool.getActualSupply(); // Returns ~343
+   uint256 lpValue = (lpAmount * lstBalanceInPool) / actualSupply;
+   ```
+
+3. **Implementation in VaultCore**:
+   - `_calculateLPTokenValue()` attempts to call `getActualSupply()` on the BPT token
+   - Falls back to manual calculation (totalSupply - pool's BPT) if call fails
+   - LP values are automatically included in `getTotalAssets()`
+
+#### Test Results:
+- ✅ `getActualSupply()` returns correct circulating supply
+- ✅ LP token values accurately calculated
+- ✅ totalAssets includes LP token underlying value
+- ✅ Proportional value matches actual exitPool amounts
+
 ### Balancer JoinPool userData Encoding (2025-08-20)
 
 **⚠️ CRITICAL: userData encoding for Balancer joinPool must exclude BPT token amounts**
