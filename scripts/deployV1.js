@@ -30,8 +30,9 @@ async function main() {
     const TokenizedVaultFactory = await ethers.getContractFactory("KommuneVault");
 
     /**
-     * TODO : 에러 해결
-     *        ProviderError: the method web3_clientVersion does not exist/is not available
+     * When this error happens, wait for a while and try deploying again.
+     * It seems to be caused by RPC node issues of the chain.”
+     *     ProviderError: the method web3_clientVersion does not exist/is not available
      */
     await new Promise((res) => setTimeout(res, 3000));
 
