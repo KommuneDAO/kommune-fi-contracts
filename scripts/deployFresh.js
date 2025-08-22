@@ -55,9 +55,21 @@ async function main() {
     newDeployments.swapContract = await swapContract.getAddress();
     console.log("   ✅ SwapContract deployed at:", newDeployments.swapContract);
     
-    // 3. Deploy VaultCore (UUPS Proxy)
-    console.log("\n3️⃣ Deploying VaultCore (UUPS proxy)...");
-    const VaultCore = await ethers.getContractFactory("VaultCore");
+    // 3. Deploy LPCalculations library
+    console.log("\n3️⃣ Deploying LPCalculations library...");
+    const LPCalculations = await ethers.getContractFactory("LPCalculations");
+    const lpCalculations = await LPCalculations.deploy();
+    await lpCalculations.waitForDeployment();
+    const lpCalculationsAddress = await lpCalculations.getAddress();
+    console.log("   ✅ LPCalculations library deployed at:", lpCalculationsAddress);
+    
+    // 4. Deploy VaultCore (UUPS Proxy) with library linking
+    console.log("\n4️⃣ Deploying VaultCore (UUPS proxy)...");
+    const VaultCore = await ethers.getContractFactory("VaultCore", {
+        libraries: {
+            LPCalculations: lpCalculationsAddress
+        }
+    });
     
     // Default investRatio: 90% for maximum user returns
     const investRatio = 9000; // 90% to maximize investment returns
@@ -73,7 +85,7 @@ async function main() {
         { 
             initializer: "initialize",
             kind: 'uups',
-            unsafeAllow: ["delegatecall"],
+            unsafeAllow: ["delegatecall", "external-library-linking"],
             redeployImplementation: 'always' // Force new implementation
         }
     );
@@ -82,8 +94,8 @@ async function main() {
     console.log("   ✅ VaultCore deployed at:", newDeployments.vaultCore);
     console.log("   📊 Investment Ratio: 90% (maximizing user returns)");
     
-    // 4. Deploy ShareVault (UUPS Proxy) 
-    console.log("\n4️⃣ Deploying ShareVault (UUPS proxy)...");
+    // 5. Deploy ShareVault (UUPS Proxy) 
+    console.log("\n5️⃣ Deploying ShareVault (UUPS proxy)...");
     const ShareVault = await ethers.getContractFactory("ShareVault");
     const shareVault = await upgrades.deployProxy(
         ShareVault,
@@ -103,8 +115,8 @@ async function main() {
     newDeployments.shareVault = await shareVault.getAddress();
     console.log("   ✅ ShareVault deployed at:", newDeployments.shareVault);
     
-    // 5. Configure connections
-    console.log("\n5️⃣ Configuring connections...");
+    // 6. Configure connections
+    console.log("\n6️⃣ Configuring connections...");
     
     // Set ShareVault in VaultCore
     let tx = await vaultCore.setShareVault(newDeployments.shareVault);
@@ -121,8 +133,8 @@ async function main() {
     await tx.wait();
     console.log("   ✅ SwapContract.setAuthorizedCaller completed");
     
-    // 6. LST tokens are already configured in VaultCore initialization
-    console.log("\n6️⃣ LST tokens already configured in contract initialization");
+    // 7. LST tokens are already configured in VaultCore initialization
+    console.log("\n7️⃣ LST tokens already configured in contract initialization");
     
     // Verify token configuration
     const token0 = await vaultCore.tokensInfo(0);
@@ -134,16 +146,16 @@ async function main() {
     const token3 = await vaultCore.tokensInfo(3);
     console.log("   ✅ stKAIA configured:", token3.handler !== "0x0000000000000000000000000000000000000000");
     
-    // 7. Set initial APY
-    console.log("\n7️⃣ Setting initial APY...");
+    // 8. Set initial APY
+    console.log("\n8️⃣ Setting initial APY...");
     await vaultCore.setAPY(0, 2500); // wKoKAIA: 25%
     await vaultCore.setAPY(1, 2500); // wGCKAIA: 25%
     await vaultCore.setAPY(2, 2500); // wstKLAY: 25%
     await vaultCore.setAPY(3, 2500); // stKAIA: 25%
     console.log("   ✅ APY set to 25% for all LSTs");
     
-    // 8. Set investment ratios
-    console.log("\n8️⃣ Setting investment ratios...");
+    // 9. Set investment ratios
+    console.log("\n9️⃣ Setting investment ratios...");
     await vaultCore.setInvestmentRatios(
         investRatio,  // All 90% to stable (LST staking)
         0,            // 0% to balanced
@@ -154,8 +166,8 @@ async function main() {
     console.log("      - Balanced: 0%");
     console.log("      - Aggressive: 0%");
     
-    // 9. Save deployment addresses
-    console.log("\n9️⃣ Saving deployment addresses...");
+    // 10. Save deployment addresses
+    console.log("\n🔟 Saving deployment addresses...");
     newDeployments.wkaia = WKAIA;
     newDeployments.balancerVault = BALANCER_VAULT;
     newDeployments.chainId = chainId.toString();
@@ -173,8 +185,8 @@ async function main() {
     fs.writeFileSync(filename, JSON.stringify(newDeployments, null, 2));
     console.log(`   ✅ Deployment addresses saved to ${filename}`);
     
-    // 10. Verify deployment
-    console.log("\n🔟 Verifying deployment...");
+    // 11. Verify deployment
+    console.log("\n1️⃣1️⃣ Verifying deployment...");
     
     // Check connections
     const vcShareVault = await vaultCore.shareVault();
@@ -200,13 +212,14 @@ async function main() {
     console.log("   APY configured:", 
         apy0 === 2500n && apy1 === 2500n && apy2 === 2500n && apy3 === 2500n ? "✅" : "❌");
     
-    // Check investment ratios
-    const ratios = await vaultCore.getInvestmentRatios();
+    // Check investment ratios directly from public variables
+    const investRatioCheck = await vaultCore.investRatio();
+    const balancedRatioCheck = await vaultCore.balancedRatio();
+    const aggressiveRatioCheck = await vaultCore.aggressiveRatio();
     console.log("   Investment Ratios:");
-    console.log(`      Total: ${Number(ratios.total) / 100}%`);
-    console.log(`      Stable: ${Number(ratios.stable) / 100}%`);
-    console.log(`      Balanced: ${Number(ratios.balanced) / 100}%`);
-    console.log(`      Aggressive: ${Number(ratios.aggressive) / 100}%`);
+    console.log(`      Invest: ${Number(investRatioCheck) / 100}%`);
+    console.log(`      Balanced: ${Number(balancedRatioCheck) / 100}%`);
+    console.log(`      Aggressive: ${Number(aggressiveRatioCheck) / 100}%`);
     
     console.log("\n════════════════════════════════════════════════");
     console.log("🎉 COMPLETELY FRESH DEPLOYMENT COMPLETE!");

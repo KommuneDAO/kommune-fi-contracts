@@ -13,6 +13,7 @@ import {IBalancerVaultExtended} from "./interfaces/IBalancerVaultExtended.sol";
 import {IWrappedLST} from "./interfaces/IWrappedLST.sol";
 import {IKoKaia} from "./interfaces/IKoKaia.sol";
 import {SharedStorage} from "./SharedStorage.sol";
+import {LPCalculations} from "./libraries/LPCalculations.sol";
 
 /**
  * @title VaultCore
@@ -225,18 +226,18 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
      * @param depositor The address of the original depositor
      */
     function handleDeposit(uint256 amount, address depositor) external returns (bool) {
-        require(msg.sender == shareVault, "Only ShareVault");
-        require(amount > 0, "Zero amount");
+        if (msg.sender != shareVault) revert("E1");
+        if (amount == 0) revert("E2");
         
         // Verify WKAIA was received
         uint256 wkaiaBalance = IERC20(wkaia).balanceOf(address(this));
-        require(wkaiaBalance >= amount, "Insufficient WKAIA");
+        if (wkaiaBalance < amount) revert("E4");
         
         // Calculate total amount to invest based on investRatio
         uint256 amountToInvest = (amount * investRatio) / 10000;
         
         if (amountToInvest > 0) {
-            require(wkaiaBalance >= amountToInvest, "Insufficient WKAIA for investment");
+            if (wkaiaBalance < amountToInvest) revert("E5");
             
             // Unwrap WKAIA to KAIA for investment
             IWKaia(wkaia).withdraw(amountToInvest);
@@ -264,8 +265,8 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
      * @dev Handle native KAIA deposit from ShareVault
      */
     function handleDepositKAIA() external payable returns (bool) {
-        require(msg.sender == shareVault, "Only ShareVault");
-        require(msg.value > 0, "Zero amount");
+        if (msg.sender != shareVault) revert("E1");
+        if (msg.value == 0) revert("E2");
         
         uint256 kaiaAmount = msg.value;
         
@@ -302,8 +303,8 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
      * @dev Handle withdrawal request from ShareVault
      */
     function handleWithdraw(uint256 amount, address recipient) external returns (bool) {
-        require(msg.sender == shareVault, "Only ShareVault");
-        require(amount > 0, "Zero amount");
+        if (msg.sender != shareVault) revert("E1");
+        if (amount == 0) revert("E2");
         
         // Check WKAIA balance
         uint256 wkaiaBalance = IERC20(wkaia).balanceOf(address(this));
@@ -379,7 +380,7 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
             wkaiaBalance = IERC20(wkaia).balanceOf(address(this));
             
             // If we still don't have enough after swaps, revert
-            require(wkaiaBalance >= amount, "Insufficient WKAIA after swaps");
+            if (wkaiaBalance < amount) revert("E6");
             
             IERC20(wkaia).safeTransfer(recipient, amount);
         }
@@ -393,7 +394,7 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
      */
     function _distributToLSTs(uint256 amount) private {
         uint256 totalAPY = lstAPY[0] + lstAPY[1] + lstAPY[2] + lstAPY[3];
-        require(totalAPY > 0, "No APY set");
+        if (totalAPY == 0) revert("E7");
         
         uint256 remaining = amount;
         
@@ -423,13 +424,13 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
             (bool success,) = info.handler.call{value: amount}(
                 abi.encodeWithSignature("stake()")
             );
-            require(success, "stKAIA stake failed");
+            if (!success) revert("E8");
         } else {
             // Other protocols - use stake() and wrap
             (bool success,) = info.handler.call{value: amount}(
                 abi.encodeWithSignature("stake()")
             );
-            require(success, "LST stake failed");
+            if (!success) revert("E9");
             
             // Get the LST balance
             uint256 lstBalance = IERC20(info.asset).balanceOf(address(this));
@@ -440,7 +441,7 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
                 (success,) = info.tokenA.call(
                     abi.encodeWithSignature("wrap(uint256)", lstBalance)
                 );
-                require(success, "Wrap failed");
+                if (!success) revert("E10");
             }
         }
     }
@@ -589,7 +590,7 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
     // Admin functions
     
     function setShareVault(address _shareVault) external onlyOwner {
-        require(_shareVault != address(0), "Invalid address");
+        if (_shareVault == address(0)) revert("E11");
         shareVault = _shareVault;
     }
     
@@ -602,22 +603,22 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
     
     
     function setSwapContract(address _swapContract) external onlyOwner {
-        require(_swapContract != address(0), "Invalid address");
+        if (_swapContract == address(0)) revert("E11");
         swapContract = _swapContract;
     }
     
     function setInvestRatio(uint256 _investRatio) external onlyOwner {
-        require(_investRatio <= 10000, "Invalid ratio");
+        if (_investRatio > 10000) revert("E12");
         investRatio = _investRatio;
     }
     
     function setAPY(uint256 index, uint256 apy) external onlyOwner {
-        require(index < 4, "Invalid index");
+        if (index >= 4) revert("E3");
         lstAPY[index] = apy;
     }
     
     function setClaimManager(address _claimManager) external onlyOwner {
-        require(_claimManager != address(0), "Invalid address");
+        if (_claimManager == address(0)) revert("E11");
         claimManager = _claimManager;
     }
     
@@ -632,8 +633,8 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
         uint256 _balancedRatio,
         uint256 _aggressiveRatio
     ) external onlyOwner {
-        require(_investRatio <= 10000, "Invest ratio exceeds 100%");
-        require(_balancedRatio + _aggressiveRatio <= 10000, "LP ratios exceed 100%");
+        if (_investRatio > 10000) revert("E12");
+        if (_balancedRatio + _aggressiveRatio > 10000) revert("E13");
         
         investRatio = _investRatio;
         balancedRatio = _balancedRatio;
@@ -646,19 +647,19 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
      * Required before unstaking for some protocols
      */
     function unwrapLST(uint256 lstIndex, uint256 amount) external onlyOwner returns (uint256) {
-        require(lstIndex < 3, "Only for wrapped LSTs");
-        require(amount > 0, "Amount must be positive");
+        if (lstIndex >= 3) revert("E14");
+        if (amount == 0) revert("E2");
         
         TokenInfo memory info = tokensInfo[lstIndex];
         uint256 wrappedBalance = IERC20(info.tokenA).balanceOf(address(this));
-        require(wrappedBalance >= amount, "Insufficient wrapped balance");
+        if (wrappedBalance < amount) revert("E15");
         
         // Use interface call instead of low-level call
         // This properly handles the return value and success status
         uint256 unwrappedAmount = IWrappedLST(info.tokenA).unwrap(amount);
         
         // Verify we received the KoKAIA/GcKAIA/stKLAY
-        require(unwrappedAmount > 0, "No tokens received from unwrap");
+        if (unwrappedAmount == 0) revert("E16");
         
         return unwrappedAmount;
     }
@@ -669,15 +670,15 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
      * For others: Uses delegatecall to ClaimManager
      */
     function unstakeWrapped(address user, uint256 lstIndex, uint256 amount) external onlyOwner {
-        require(lstIndex < 3, "Only for wrapped LSTs (0-2)");
-        require(amount > 0, "Amount must be positive");
-        require(user != address(0), "Invalid user");
+        if (lstIndex >= 3) revert("E14");
+        if (amount == 0) revert("E2");
+        if (user == address(0)) revert("E11");
         
         TokenInfo memory info = tokensInfo[lstIndex];
         
         // Check we have enough wrapped token balance
         uint256 wrappedBalance = IERC20(info.tokenA).balanceOf(address(this));
-        require(wrappedBalance >= amount, "Insufficient wrapped token balance");
+        if (wrappedBalance < amount) revert("E15");
         
         if (lstIndex == 0) {
             // For wKoKAIA: handler (KoKAIA contract) can process wKoKAIA unstake
@@ -691,11 +692,11 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
             emit WrappedUnstake(user, lstIndex, amount);
         } else {
             // For wGcKAIA and wstKLAY, use ClaimManager
-            require(claimManager != address(0), "ClaimManager not set");
+            if (claimManager == address(0)) revert("E17");
             (bool success, ) = claimManager.delegatecall(
                 abi.encodeWithSignature("executeUnstakeWrapped(address,uint256,uint256)", user, lstIndex, amount)
             );
-            require(success, "Wrapped unstake execution failed");
+            if (!success) revert("E18");
         }
     }
     
@@ -705,21 +706,21 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
      * All LST unstakes are handled through ClaimManager via delegatecall
      */
     function unstake(address user, uint256 lstIndex, uint256 amount) external onlyOwner {
-        require(lstIndex < 4, "Invalid LST index");
-        require(amount > 0, "Amount must be positive");
-        require(user != address(0), "Invalid user");
+        if (lstIndex >= 4) revert("E3");
+        if (amount == 0) revert("E2");
+        if (user == address(0)) revert("E11");
         
         // Ensure we have enough LST balance
         TokenInfo memory info = tokensInfo[lstIndex];
         uint256 balance = IERC20(info.asset).balanceOf(address(this));
-        require(balance >= amount, "Insufficient LST balance for unstake");
+        if (balance < amount) revert("E19");
         
         // All LSTs including KoKAIA use ClaimManager via delegatecall
         require(claimManager != address(0), "ClaimManager not set");
         (bool success, bytes memory data) = claimManager.delegatecall(
             abi.encodeWithSignature("executeUnstake(address,uint256,uint256)", user, lstIndex, amount)
         );
-        require(success, "Unstake execution failed");
+        if (!success) revert("E20");
     }
     
     /**
@@ -728,13 +729,13 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
      */
     function claim(address user, uint256 lstIndex) external onlyOwner returns (uint256) {
         require(claimManager != address(0), "ClaimManager not set");
-        require(lstIndex < 4, "Invalid LST index");
+        if (lstIndex >= 4) revert("E3");
         
         // Execute claim via delegatecall
         (bool success, bytes memory data) = claimManager.delegatecall(
             abi.encodeWithSignature("executeClaim(address,uint256)", user, lstIndex)
         );
-        require(success, "Claim execution failed");
+        if (!success) revert("E21");
         
         uint256 claimedAmount = abi.decode(data, (uint256));
         
@@ -851,10 +852,10 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
      * @param lpAmount Amount of LP tokens to remove
      */
     function removeLiquidity(uint256 lstIndex, uint256 lpAmount) external onlyOwner {
-        require(lstIndex < 4, "Invalid LST index");
-        require(lpAmount > 0, "Zero amount");
+        if (lstIndex >= 4) revert("E3");
+        if (lpAmount == 0) revert("E2");
         // All BPT is stored at index 0 since all LSTs share the same pool
-        require(lpBalance >= lpAmount, "Insufficient LP balance");
+        if (lpBalance < lpAmount) revert("E22");
         
         // Use same assets array as joinPool (5 tokens)
         IAsset[] memory assets = new IAsset[](5);
@@ -921,12 +922,12 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
      * @param amount Amount of wrapped LST tokens to add as liquidity
      */
     function addLiquidityManual(uint256 lstIndex, uint256 amount) external onlyOwner {
-        require(lstIndex < 4, "Invalid LST index");
-        require(amount > 0, "Zero amount");
+        if (lstIndex >= 4) revert("E3");
+        if (amount == 0) revert("E2");
         
         TokenInfo memory info = tokensInfo[lstIndex];
         uint256 balance = IERC20(info.tokenA).balanceOf(address(this));
-        require(balance >= amount, "Insufficient balance");
+        if (balance < amount) revert("E23");
         
         _addLiquidityToPool(lstIndex);
     }
@@ -955,74 +956,12 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
      * @return underlyingAmount Amount of wrapped LST tokens the LP represents
      */
     function _calculateLPTokenValue(uint256 lstIndex, uint256 lpAmount) private view returns (uint256) {
-        // All LSTs share the same BPT token
-        if (lpAmount == 0 || lpToken == address(0)) {
-            return 0;
-        }
-        
-        TokenInfo memory info = tokensInfo[lstIndex];
-        // lpToken is already a state variable, no need to redeclare
-        
-        // Get pool token balances and total supply
-        (address[] memory poolTokens, uint256[] memory balances, ) = 
-            IBalancerVaultExtended(balancerVault).getPoolTokens(info.pool1);
-        
-        // Find the index of our LST token and BPT in the pool
-        uint256 lstTokenIndex = type(uint256).max;
-        uint256 bptIndex = type(uint256).max;
-        
-        for (uint256 i = 0; i < poolTokens.length; i++) {
-            if (poolTokens[i] == info.tokenA) {
-                lstTokenIndex = i;
-            }
-            if (poolTokens[i] == lpToken) {
-                bptIndex = i;
-            }
-        }
-        
-        if (lstTokenIndex == type(uint256).max) {
-            return 0; // Token not found in pool
-        }
-        
-        // Get total LP token supply
-        uint256 totalLPSupply = IERC20(lpToken).totalSupply();
-        if (totalLPSupply == 0) {
-            return 0;
-        }
-        
-        // For Composable Stable Pools, use circulating supply
-        // Circulating supply = Total supply - Pool's BPT balance
-        uint256 circulatingSupply = totalLPSupply;
-        if (bptIndex != type(uint256).max) {
-            // Pool holds BPT, so subtract it from total supply
-            circulatingSupply = totalLPSupply - balances[bptIndex];
-            if (circulatingSupply == 0) {
-                return 0;
-            }
-        }
-        
-        // For accurate valuation, we should try to get actualSupply from the pool
-        // Try to call getActualSupply() on the BPT token (which is the pool contract)
-        uint256 actualSupply = circulatingSupply;
-        
-        // Try to get actual supply from the pool contract
-        (bool success, bytes memory data) = lpToken.staticcall(
-            abi.encodeWithSignature("getActualSupply()")
+        return LPCalculations.calculateLPTokenValue(
+            lpAmount,
+            lpToken,
+            balancerVault,
+            tokensInfo[lstIndex]
         );
-        
-        if (success && data.length >= 32) {
-            uint256 poolActualSupply = abi.decode(data, (uint256));
-            if (poolActualSupply > 0) {
-                actualSupply = poolActualSupply;
-            }
-        }
-        
-        // Calculate proportional share of the LST in the pool
-        // For Composable Stable Pools, this gives us the underlying value
-        uint256 lstBalanceInPool = balances[lstTokenIndex];
-        uint256 underlyingAmount = (lpAmount * lstBalanceInPool) / actualSupply;
-        
-        return underlyingAmount;
     }
     
     /**
@@ -1032,7 +971,7 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
      * @return underlyingValue Amount of wrapped LST the LP tokens represent
      */
     function getLPTokenValue(uint256 lstIndex) external view returns (uint256) {
-        require(lstIndex < 4, "Invalid LST index");
+        if (lstIndex >= 4) revert("E3");
         // All LSTs share the same pool and BPT
         return _calculateLPTokenValue(lstIndex, lpBalance);
     }
@@ -1045,7 +984,7 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
      * @return underlyingValue Amount of wrapped LST the LP tokens represent
      */
     function calculateLPTokenValue(uint256 lstIndex, uint256 lpAmount) external view returns (uint256) {
-        require(lstIndex < 4, "Invalid LST index");
+        if (lstIndex >= 4) revert("E3");
         return _calculateLPTokenValue(lstIndex, lpAmount);
     }
     
