@@ -47,8 +47,8 @@ contract SharedStorage {
     uint256 public aggressiveRatio; // slot 13 - % of LSTs to add to pool2 for LP tokens
     
     // ========== BALANCER LP TRACKING (slots 15-16) ==========
-    mapping(uint256 => uint256) public lpBalances;      // slot 15 - lstIndex => LP token balance
-    mapping(uint256 => address) public lpTokens;        // slot 16 - lstIndex => LP token address
+    uint256 public lpBalance;           // slot 15 - Total BPT balance (all LSTs share same pool)
+    address public lpToken;             // slot 16 - BPT token address
     
     // ========== RESERVE FOR FUTURE UPGRADES ==========
     // When adding new variables:

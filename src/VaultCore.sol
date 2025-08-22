@@ -203,16 +203,16 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
                 }
             }
             
-            // Add LP token value if exists
-            // Calculate the underlying LST value of LP tokens
-            if (lpBalances[i] > 0 && lpTokens[i] != address(0)) {
-                // Calculate the actual underlying LST value of LP tokens
-                uint256 lpValue = _calculateLPTokenValue(i, lpBalances[i]);
-                lstBalance += lpValue;
-            }
+            // LP tokens are handled separately after the loop
             
             // Add to total (1:1 ratio assumed for now)
             total += lstBalance;
+        }
+        
+        // Add LP token value (all LSTs share same BPT at index 0)
+        if (lpBalance > 0 && lpToken != address(0)) {
+            uint256 lpValue = _calculateLPTokenValue(0, lpBalance);
+            total += lpValue;
         }
         
         return total;
@@ -566,8 +566,8 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
             
             // Store LP token info (all LSTs share the same pool and BPT)
             if (bptReceived > 0) {
-                lpTokens[0] = tokensInfo[0].tokenB; // Store BPT address
-                lpBalances[0] = bptAfter; // Store total BPT balance
+                lpToken = tokensInfo[0].tokenB; // Store BPT address
+                lpBalance = bptAfter; // Store total BPT balance
                 
                 // Emit event with total LST amount and BPT received
                 uint256 totalLSTAmount = maxAmountsIn[0] + maxAmountsIn[1] + maxAmountsIn[2] + maxAmountsIn[3];
@@ -640,19 +640,6 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
         aggressiveRatio = _aggressiveRatio;
     }
     
-    /**
-     * @dev Get current investment ratios
-     * @return invest Overall investment ratio (% of deposits to invest in LSTs)
-     * @return balanced % of LSTs to add to pool1 for LP tokens
-     * @return aggressive % of LSTs to add to pool2 for LP tokens
-     */
-    function getInvestmentRatios() external view returns (
-        uint256 invest,
-        uint256 balanced,
-        uint256 aggressive
-    ) {
-        return (investRatio, balancedRatio, aggressiveRatio);
-    }
     
     /**
      * @dev Unwrap wrapped LST tokens (e.g., wKoKAIA to KoKAIA)
@@ -851,8 +838,9 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
         uint256 lpReceived = lpAfter - lpBefore;
         
         if (lpReceived > 0) {
-            lpBalances[lstIndex] += lpReceived;
-            lpTokens[lstIndex] = lpToken;
+            // All LSTs share the same pool and BPT token, so always use index 0
+            lpBalance = lpAfter;  // Store total BPT balance
+            lpToken = lpToken;    // Store BPT token address
             emit LiquidityAdded(lstIndex, tokenBalance, lpReceived);
         }
     }
@@ -865,7 +853,8 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
     function removeLiquidity(uint256 lstIndex, uint256 lpAmount) external onlyOwner {
         require(lstIndex < 4, "Invalid LST index");
         require(lpAmount > 0, "Zero amount");
-        require(lpBalances[lstIndex] >= lpAmount, "Insufficient LP balance");
+        // All BPT is stored at index 0 since all LSTs share the same pool
+        require(lpBalance >= lpAmount, "Insufficient LP balance");
         
         // Use same assets array as joinPool (5 tokens)
         IAsset[] memory assets = new IAsset[](5);
@@ -919,7 +908,8 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
         uint256 totalReceived = tokenAfter - tokensBefore[lstIndex];
         
         // Update LP balance
-        lpBalances[lstIndex] -= lpAmount;
+        // Update total BPT balance at index 0
+        lpBalance -= lpAmount;
         
         emit LiquidityRemoved(lstIndex, lpAmount, totalReceived);
     }
@@ -941,16 +931,6 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
         _addLiquidityToPool(lstIndex);
     }
     
-    /**
-     * @dev Get LP token balance for a specific LST
-     * @param lstIndex Index of the LST (0-3)
-     * @return lpBalance Amount of LP tokens held
-     * @return lpToken Address of the LP token
-     */
-    function getLPInfo(uint256 lstIndex) external view returns (uint256 lpBalance, address lpToken) {
-        require(lstIndex < 4, "Invalid LST index");
-        return (lpBalances[lstIndex], lpTokens[lstIndex]);
-    }
     
     /**
      * @dev Helper function to find LP token from pool tokens
@@ -975,12 +955,13 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
      * @return underlyingAmount Amount of wrapped LST tokens the LP represents
      */
     function _calculateLPTokenValue(uint256 lstIndex, uint256 lpAmount) private view returns (uint256) {
-        if (lpAmount == 0 || lpTokens[lstIndex] == address(0)) {
+        // All LSTs share the same BPT token
+        if (lpAmount == 0 || lpToken == address(0)) {
             return 0;
         }
         
         TokenInfo memory info = tokensInfo[lstIndex];
-        address lpToken = lpTokens[lstIndex];
+        // lpToken is already a state variable, no need to redeclare
         
         // Get pool token balances and total supply
         (address[] memory poolTokens, uint256[] memory balances, ) = 
@@ -1052,7 +1033,8 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
      */
     function getLPTokenValue(uint256 lstIndex) external view returns (uint256) {
         require(lstIndex < 4, "Invalid LST index");
-        return _calculateLPTokenValue(lstIndex, lpBalances[lstIndex]);
+        // All LSTs share the same pool and BPT
+        return _calculateLPTokenValue(lstIndex, lpBalance);
     }
     
     /**
@@ -1067,42 +1049,85 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
         return _calculateLPTokenValue(lstIndex, lpAmount);
     }
     
+    // ========== ASSET BALANCE FUNCTIONS ==========
+    
+    /**
+     * @dev Get all vault asset balances
+     * Returns arrays with 14 elements:
+     * [0] KAIA, [1] WKAIA, [2-8] LST tokens, [9-12] BPT amounts, [13] BPT total value
+     * @return balances Array of all asset balances
+     */
+    function getVaultAssets() external view returns (uint256[14] memory balances) {
+        // [0] Native KAIA
+        balances[0] = address(this).balance;
+        
+        // [1] WKAIA
+        balances[1] = wkaia != address(0) ? IERC20(wkaia).balanceOf(address(this)) : 0;
+        
+        // [2-3] LST 0: KoKAIA / wKoKAIA
+        if (tokensInfo[0].handler != address(0)) {
+            balances[2] = IERC20(tokensInfo[0].asset).balanceOf(address(this));  // KoKAIA
+            balances[3] = IERC20(tokensInfo[0].tokenA).balanceOf(address(this)); // wKoKAIA
+        }
+        
+        // [4-5] LST 1: GCKAIA / wGCKAIA
+        if (tokensInfo[1].handler != address(0)) {
+            balances[4] = IERC20(tokensInfo[1].asset).balanceOf(address(this));  // GCKAIA
+            balances[5] = IERC20(tokensInfo[1].tokenA).balanceOf(address(this)); // wGCKAIA
+        }
+        
+        // [6-7] LST 2: stKLAY / wstKLAY
+        if (tokensInfo[2].handler != address(0)) {
+            balances[6] = IERC20(tokensInfo[2].asset).balanceOf(address(this));  // stKLAY
+            balances[7] = IERC20(tokensInfo[2].tokenA).balanceOf(address(this)); // wstKLAY
+        }
+        
+        // [8] LST 3: stKAIA
+        if (tokensInfo[3].handler != address(0)) {
+            balances[8] = IERC20(tokensInfo[3].asset).balanceOf(address(this));  // stKAIA
+        }
+        
+        // [9] Total BPT balance (all LSTs share same pool)
+        balances[9] = lpBalance;   // Total BPT
+        
+        // [10] BPT underlying value in WKAIA
+        if (lpBalance > 0) {
+            balances[10] = _calculateLPTokenValue(0, lpBalance);
+        }
+        
+        // [11-13] Reserved for future use
+        balances[11] = 0;
+        balances[12] = 0;
+        balances[13] = 0;
+        
+        return balances;
+    }
+    
+    /**
+     * @dev Get asset names for the getVaultAssets return values
+     * @return names Array of asset names corresponding to balance indices
+     */
+    function getAssetNames() external pure returns (string[14] memory names) {
+        names[0] = "KAIA";
+        names[1] = "WKAIA";
+        names[2] = "KoKAIA";
+        names[3] = "wKoKAIA";
+        names[4] = "GCKAIA";
+        names[5] = "wGCKAIA";
+        names[6] = "stKLAY";
+        names[7] = "wstKLAY";
+        names[8] = "stKAIA";
+        names[9] = "BPT_Total";
+        names[10] = "BPT_Value";
+        names[11] = "Reserved";
+        names[12] = "Reserved";
+        names[13] = "Reserved";
+        return names;
+    }
+    
     // ========== LP GETTER FUNCTIONS ==========
     
-    /**
-     * @dev Get LP token balance for specific LST
-     * @param lstIndex Index of the LST (0-3)
-     * @return LP token balance
-     */
-    function getLPBalance(uint256 lstIndex) external view returns (uint256) {
-        require(lstIndex < 4, "Invalid LST index");
-        return lpBalances[lstIndex];
-    }
     
-    /**
-     * @dev Get LP token address for specific LST
-     * @param lstIndex Index of the LST (0-3)
-     * @return LP token address
-     */
-    function getLPToken(uint256 lstIndex) external view returns (address) {
-        require(lstIndex < 4, "Invalid LST index");
-        return lpTokens[lstIndex];
-    }
-    
-    /**
-     * @dev Get comprehensive LP information for all LSTs
-     * @return balances Array of LP token balances
-     * @return tokens Array of LP token addresses
-     */
-    function getLPInfo() external view returns (uint256[] memory balances, address[] memory tokens) {
-        balances = new uint256[](4);
-        tokens = new address[](4);
-        
-        for (uint256 i = 0; i < 4; i++) {
-            balances[i] = lpBalances[i];
-            tokens[i] = lpTokens[i];
-        }
-    }
 
     // Required for UUPS
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
