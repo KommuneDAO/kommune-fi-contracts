@@ -1,162 +1,221 @@
-# Deployment Guide - Separated Vault Architecture
-
-## Overview
-This guide covers the deployment and management of the KommuneFi separated vault architecture (ShareVault + VaultCore).
+# KommuneFi Contracts - Deployment Guide
 
 ## Prerequisites
 
 ### 1. Environment Setup
 ```bash
+# Clone repository
+git clone https://github.com/KommuneFi/kommune-fi-contracts-erc20.git
+cd kommune-fi-contracts-erc20
+
 # Install dependencies
 npm install
 
-# Create and configure .env file
+# Create environment file
 cp .env.example .env
 ```
 
-Edit `.env` file:
-```
-PRIVATE_KEY=your_private_key_here
-```
-
-### 2. Network Configuration
-Ensure you have KAIA tokens for gas fees:
-- **Kairos Testnet**: Get test KAIA from faucet
-- **Mainnet**: Ensure sufficient KAIA balance
-
-## Deployment Process
-
-### Step 1: Deploy Contracts
+### 2. Configure .env File
 ```bash
-# For testnet
-npx hardhat run scripts/deploySeparatedVault.js --network kairos
+# Required for Kairos testnet
+KAIROS_PRIVATE_KEY=your_private_key_here
 
-# For mainnet
-npx hardhat run scripts/deploySeparatedVault.js --network kaia
+# Required for KAIA mainnet
+KAIA_PRIVATE_KEY=your_private_key_here
+
+# Optional: Custom RPC endpoints
+KAIROS_RPC_URL=https://public-en-kairos.node.kaia.io
+KAIA_RPC_URL=https://klaytn-en.kommunedao.xyz:8651
 ```
 
-This script will:
-1. Deploy VaultCore (UUPS proxy)
-2. Deploy ShareVault (UUPS proxy)
-3. Connect ShareVault ↔ VaultCore
-4. Set initial APY values (5%, 6%, 7%, 8%)
-5. Save deployment addresses to `deployments-{network}.json`
+### 3. Fund Deployment Wallet
+- **Testnet (Kairos)**: Need ~5 KAIA for deployment
+- **Mainnet (KAIA)**: Need ~10 KAIA for deployment
+- Get testnet KAIA from: https://kairos.wallet.kaia.io/faucet
 
-Expected output:
-```
-Deploying separated vault architecture...
+## Deployment Options
 
-Deploying with account: 0x...
-1. Deploying VaultCore...
-VaultCore deployed at: 0x...
+### Option 1: Quick Deployment with Profile (Recommended)
 
-2. Deploying ShareVault...
-ShareVault deployed at: 0x...
+Deploy with pre-configured investment profiles:
 
-3. Configuring contracts...
-ShareVault set in VaultCore
-
-4. Setting APY values...
-APY for LST 0 set to 5%
-APY for LST 1 set to 6%
-APY for LST 2 set to 7%
-APY for LST 3 set to 8%
-
-✅ Deployment complete!
-Deployment info saved to deployments-kairos.json
-```
-
-### Step 2: Verify Configuration
 ```bash
-npx hardhat run scripts/setupSeparatedVault.js --network kairos
+# Conservative Profile (30% LST, 70% liquidity)
+INVESTMENT_PROFILE=conservative npx hardhat run scripts/deployWithProfile.js --network kairos
+
+# Stable Profile (90% LST, 10% liquidity) - DEFAULT
+INVESTMENT_PROFILE=stable npx hardhat run scripts/deployWithProfile.js --network kairos
+
+# Balanced Profile (45% LST, 45% LP, 10% liquidity)
+INVESTMENT_PROFILE=balanced npx hardhat run scripts/deployWithProfile.js --network kairos
+
+# Growth Profile (30% LST, 30% LP, 30% aggressive, 10% liquidity)
+INVESTMENT_PROFILE=growth npx hardhat run scripts/deployWithProfile.js --network kairos
 ```
 
-This will verify and configure:
-- APY values for each LST
-- Invest ratio (90%)
-- Deposit limit (100 WKAIA)
-- Fee structure (0.1%)
+### Option 2: Standard Fresh Deployment
 
-### Step 3: Test Deployment
+Complete control over all parameters:
+
 ```bash
-npx hardhat run scripts/testSeparatedVault.js --network kairos
+# Deploy to testnet
+npx hardhat run scripts/deployFresh.js --network kairos
+
+# Deploy to mainnet
+npx hardhat run scripts/deployFresh.js --network kaia
 ```
 
-Run comprehensive tests to verify:
-- Initial state
-- Deposit functionality
-- Withdrawal functionality
-- Share calculations
-- State consistency
+## Deployment Process Breakdown
 
-## Upgrade Process
+### What Gets Deployed
 
-### Upgrading Contracts
-```bash
-npx hardhat run scripts/upgradeSeparatedVault.js --network kairos
+1. **ClaimManager** (Non-upgradeable)
+   - Handles unstake/claim operations
+   - Used via delegatecall from VaultCore
+
+2. **SwapContract** (UUPS Proxy)
+   - Manages Balancer V2 swaps
+   - Handles GIVEN_OUT swaps for withdrawals
+
+3. **LPCalculations** (Library)
+   - External library for LP token calculations
+   - Reduces VaultCore contract size
+
+4. **VaultCore** (UUPS Proxy)
+   - Core vault logic
+   - Manages LST investments
+   - Handles deposits/withdrawals
+
+5. **ShareVault** (UUPS Proxy)
+   - ERC-4626 compliant vault
+   - Manages user shares (kvKAIA)
+   - Entry point for users
+
+### Deployment Order & Dependencies
+
+```
+1. ClaimManager (standalone)
+2. SwapContract (standalone)
+3. LPCalculations (library)
+4. VaultCore (needs LPCalculations address)
+5. ShareVault (needs VaultCore address)
+6. Configuration (connect all contracts)
 ```
 
-This script will:
-1. Upgrade VaultCore implementation
-2. Upgrade ShareVault implementation
-3. Verify configuration remains intact
-4. Check and restore APY values if needed
+## Post-Deployment Configuration
 
-⚠️ **Important**: Always test upgrades on testnet first!
+### Automatic Configuration
+The deployment script automatically:
+- ✅ Sets ShareVault in VaultCore
+- ✅ Sets ClaimManager in VaultCore
+- ✅ Authorizes VaultCore in SwapContract
+- ✅ Configures initial APY (25% for each LST)
+- ✅ Sets investment ratios based on profile
 
-## Configuration Management
+### Manual Configuration (Optional)
 
-### APY Management
+#### 1. Adjust APY Distribution
 ```bash
-# Set individual APY
 npx hardhat run scripts/setAPY.js --network kairos
-
-# Or use console
-npx hardhat console --network kairos
-> const vaultCore = await ethers.getContractAt("VaultCore", "0x5CB80D92b24d14236C17Bfba0d0Cb96e728A87B3")
-> await vaultCore.setAPY(0, 5500) // Set wKoKAIA to 5.5%
 ```
 
-### Parameter Updates
+Or programmatically:
 ```javascript
-// Update invest ratio (90% = 9000)
-await vaultCore.setInvestRatio(9000)
-
-// Update deposit limit
-await shareVault.setDepositLimit(ethers.parseEther("200"))
-
-// Update fees (0.1% = 10 basis points)
-await shareVault.setFees(10)
+await vaultCore.setAPY(0, 3000); // 30% for wKoKAIA
+await vaultCore.setAPY(1, 2500); // 25% for wGCKAIA
+await vaultCore.setAPY(2, 2500); // 25% for wstKLAY
+await vaultCore.setAPY(3, 2000); // 20% for stKAIA
 ```
 
-## Deployment Checklist
+#### 2. Change Investment Ratios
+```javascript
+// Example: Switch to balanced profile
+await vaultCore.setInvestmentRatios(
+    4500,  // 45% to LST staking
+    4500,  // 45% to Balancer LP
+    0      // 0% to aggressive
+);
+```
 
-### Pre-Deployment
-- [ ] `.env` file configured with private key
-- [ ] Sufficient KAIA for gas fees
-- [ ] Review APY values to set
-- [ ] Confirm network (testnet vs mainnet)
+#### 3. Update Fee Structure
+```javascript
+// Set protocol fee (default: 10%)
+await shareVault.setFees(1000); // 10% = 1000 basis points
+```
 
-### Deployment
-- [ ] Run deployment script
-- [ ] Verify contracts deployed successfully
-- [ ] Check `deployments-{network}.json` created
-- [ ] Verify contract connections
+## Deployment Output
 
-### Post-Deployment
-- [ ] Run setup script to verify configuration
-- [ ] Execute test suite
-- [ ] Document deployment addresses
-- [ ] Transfer ownership if needed
+### Generated Files
 
-## Contract Addresses
-
-### Latest Deployment (Kairos Testnet)
+#### deployments-{network}.json
 ```json
 {
-  "shareVault": "0x69f222BC8e7730A182fe81D938BF4d4DA4089a48",
-  "vaultCore": "0x5CB80D92b24d14236C17Bfba0d0Cb96e728A87B3",
-  "swapContract": "0x829718DBf5e19AB36ab305ac7A7c6C9995bB5F15"
+  "shareVault": "0xF43BdDA5bc0693d952a68ABc4E0D8262A874b74e",
+  "vaultCore": "0x09bE7a4bf8c0bB28725A9369484b0852cD70cBE8",
+  "swapContract": "0x5D83C399c3bFf4fE86627eA8680431c5b8084320",
+  "claimManager": "0x72C44A898dfD0cf4689DF795D188e19049a2d996",
+  "lpCalculations": "0xf955f2aA1673c46F617A446c3a45f72eA958443f",
+  "wkaia": "0x0339d5Eb6D195Ba90B13ed1BCeAa97EbD198b106",
+  "balancerVault": "0x1c9074AA147648567015287B0d4185Cb4E04F86d",
+  "chainId": "1001",
+  "network": "kairos",
+  "deployedAt": "2025-08-22T10:30:00.000Z",
+  "profile": "stable",
+  "configuration": {
+    "investRatio": 9000,
+    "stableRatio": 9000,
+    "balancedRatio": 0,
+    "aggressiveRatio": 0
+  }
+}
+```
+
+## Verification Steps
+
+### 1. Verify Contract Connections
+```bash
+npx hardhat console --network kairos
+
+> const deployments = require('./deployments-kairos.json')
+> const vaultCore = await ethers.getContractAt("VaultCore", deployments.vaultCore)
+> await vaultCore.shareVault() // Should return ShareVault address
+> await vaultCore.swapContract() // Should return SwapContract address
+```
+
+### 2. Run Integration Test
+```bash
+npx hardhat run scripts/tests/testDepositWithdraw.js --network kairos
+```
+
+### 3. Test Small Deposit
+```bash
+npx hardhat console --network kairos
+
+> const shareVault = await ethers.getContractAt("ShareVault", deployments.shareVault)
+> await shareVault.depositKAIA(signer.address, {value: ethers.parseEther("0.1")})
+```
+
+## Network-Specific Information
+
+### Kairos Testnet
+```javascript
+{
+  chainId: 1001,
+  rpc: "https://public-en-kairos.node.kaia.io",
+  explorer: "https://kairos.kaiascan.io",
+  wkaia: "0x0339d5Eb6D195Ba90B13ed1BCeAa97EbD198b106",
+  balancerVault: "0x1c9074AA147648567015287B0d4185Cb4E04F86d"
+}
+```
+
+### KAIA Mainnet
+```javascript
+{
+  chainId: 8217,
+  rpc: "https://klaytn-en.kommunedao.xyz:8651",
+  explorer: "https://kaiascan.io",
+  wkaia: "0x19aac5f612f524b754ca7e7c41cbfa2e981a4332",
+  balancerVault: "0xTBD" // To be deployed
 }
 ```
 
@@ -164,85 +223,97 @@ await shareVault.setFees(10)
 
 ### Common Issues
 
-#### 1. "Contract size exceeds limit"
-The separated architecture specifically addresses this. Ensure you're using:
-- ShareVault: ~12.23 KB
-- VaultCore: ~10.17 KB
+#### 1. "Insufficient funds for gas"
+- **Solution**: Ensure deployment wallet has enough KAIA
+- Testnet: ~5 KAIA needed
+- Mainnet: ~10 KAIA needed
 
-#### 2. "ShareVault not set in VaultCore"
-Run the setup script to restore connections:
-```bash
-npx hardhat run scripts/setupSeparatedVault.js --network kairos
-```
+#### 2. "Contract size exceeds limit"
+- **Solution**: Already optimized to 19.4 KB
+- If modified, ensure optimizer is enabled in hardhat.config.js
 
-#### 3. "Zero shares" error
-This typically occurs on first deposit. Solutions:
-- Ensure APY values are set (non-zero)
-- Check total supply is properly initialized
-- Verify WKAIA balance in contracts
+#### 3. "Library not found"
+- **Solution**: Deploy LPCalculations library first
+- Library address must be linked to VaultCore
 
-#### 4. Gas estimation errors
-Increase gas limit in transactions:
+#### 4. "Transaction timeout"
+- **Solution**: Increase timeout in hardhat.config.js
 ```javascript
-{ gasLimit: 5000000 }
+networks: {
+  kairos: {
+    timeout: 600000 // 10 minutes
+  }
+}
 ```
 
-## Security Considerations
+#### 5. "Nonce too high"
+- **Solution**: Reset nonce in wallet or wait for pending transactions
 
-### Access Control
-- Only owner can upgrade contracts
-- Only owner can set APY values
-- Only owner can update parameters
+## Security Checklist
 
-### Best Practices
-1. Always test on Kairos testnet first
-2. Use multisig for production deployments
-3. Verify all parameters before mainnet deployment
-4. Keep deployment artifacts secure
-5. Document all configuration changes
+Before mainnet deployment:
 
-## Monitoring
+- [ ] Audit completed and issues resolved
+- [ ] All tests passing
+- [ ] Deployment wallet is secure (hardware wallet recommended)
+- [ ] Multi-sig wallet ready for ownership transfer
+- [ ] Emergency pause mechanism tested
+- [ ] Upgrade process documented and tested
+- [ ] Initial liquidity prepared (recommend 10+ KAIA)
+- [ ] APY values verified with current market rates
+- [ ] Investment ratios appropriate for launch
 
-### Key Metrics to Monitor
-- Total Value Locked (TVL)
-- Share price (assets/shares ratio)
-- APY distribution across LSTs
-- User deposit/withdrawal patterns
-- Gas usage patterns
+## Post-Deployment Actions
 
-### Events to Track
-```solidity
-event Deposit(address indexed sender, address indexed owner, uint256 assets, uint256 shares)
-event Withdraw(address indexed sender, address indexed receiver, address indexed owner, uint256 assets, uint256 shares)
-event APYUpdated(uint256 indexed index, uint256 apy)
+### 1. Transfer Ownership (Mainnet Only)
+```javascript
+// Transfer to multi-sig
+await shareVault.transferOwnership(multiSigAddress);
+await vaultCore.transferOwnership(multiSigAddress);
+await swapContract.transferOwnership(multiSigAddress);
 ```
 
-## Emergency Procedures
+### 2. Seed Initial Liquidity
+```javascript
+// Add initial liquidity for smooth operations
+await shareVault.depositKAIA(treasury, {value: ethers.parseEther("10")});
+```
 
-### Pause Operations
-Currently no pause mechanism. For emergency:
-1. Set APY to 0 for all protocols
-2. Prepare upgrade with fixes
-3. Deploy upgrade
+### 3. Configure Monitoring
+- Set up transaction monitoring
+- Configure alerts for large deposits/withdrawals
+- Monitor TVL and APY performance
 
-### Recovery from Failed Upgrade
-1. Deploy new implementation
-2. Use upgrade script with new implementation
-3. Verify state is preserved
-4. Test all functionality
+### 4. Update Frontend
+- Update contract addresses in frontend config
+- Update ABI files if changed
+- Test frontend integration
+
+## Deployment Cost Estimates
+
+### Testnet (Kairos)
+- ClaimManager: ~0.5 KAIA
+- SwapContract: ~1.0 KAIA
+- LPCalculations: ~0.3 KAIA
+- VaultCore: ~2.0 KAIA
+- ShareVault: ~1.5 KAIA
+- **Total: ~5.3 KAIA**
+
+### Mainnet (KAIA)
+- Expected similar costs
+- Add 2x buffer for gas price variations
+- **Recommended: 10+ KAIA**
 
 ## Support
 
-For issues or questions:
-- Review test scripts in `/scripts/tests/`
-- Check deployment logs in `deployments-{network}.json`
-- Verify contract state using read functions
+For deployment issues:
+1. Check this guide
+2. Review error messages carefully
+3. Verify network configuration
+4. Contact technical team
 
-## Next Steps
+---
 
-After successful deployment:
-1. Monitor initial deposits
-2. Verify APY distribution working correctly
-3. Test withdrawal functionality
-4. Document any custom configurations
-5. Set up monitoring dashboards
+**Version**: 1.0.0
+**Last Updated**: 2025-08-22
+**Tested On**: Kairos Testnet
