@@ -223,8 +223,8 @@ await shareVault.withdraw(withdrawWKAIA, user, user);
 
 ### Scripts Organization
 - `scripts/` - Essential deployment and configuration scripts
-  - `deploy.js` - V1 deployment (DO NOT MODIFY)
-  - `upgrade.js` - V1 upgrade (DO NOT MODIFY)
+  - `deployV1.js` - V1 deployment (DO NOT MODIFY)
+  - `upgradeV1.js` - V1 upgrade (DO NOT MODIFY)
   - `deploySeparatedVault.js` - Deploy V2 (ShareVault + VaultCore)
   - `upgradeSeparatedVault.js` - Upgrade V2
   - `setupSeparatedVault.js` - Configure V2

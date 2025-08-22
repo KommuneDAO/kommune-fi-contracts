@@ -41,7 +41,7 @@ yarn deploy-vault:dev   # Testnet
 yarn deploy-vault:prod  # Mainnet
 ```
 
-### `deploy.js`
+### `deployV1.js`
 레거시 배포 스크립트 (deprecated)
 
 ---
@@ -62,7 +62,7 @@ yarn upgrade-vault:dev   # Testnet
 yarn upgrade-vault:prod  # Mainnet
 ```
 
-### `upgrade.js`
+### `upgradeV1.js`
 레거시 업그레이드 스크립트 (deprecated)
 
 ---

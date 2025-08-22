@@ -10,7 +10,6 @@
     "test": "hardhat test",
     
     "// === V2 DEPLOYMENT (CURRENT) - TESTNET ===": "",
-    "deploy:v1:testnet": "hardhat run ./scripts/deploy.js --network kairos",
     "deploy:testnet": "hardhat run ./scripts/deployFresh.js --network kairos",
     "upgrade:testnet": "hardhat run ./scripts/upgradeVaultCore.js --network kairos",
     "upgrade:testnet:all": "hardhat run ./scripts/upgradeAll.js --network kairos",
@@ -24,7 +23,6 @@
     "test:mainnet": "hardhat run ./scripts/testIntegrated.js --network kaia",
     
     "// === V2 DEPLOYMENT (CURRENT) - MAINNET ===": "",
-    "deploy:v1:mainnet": "hardhat run ./scripts/deploy.js --network kaia",
     "deploy:mainnet": "hardhat run ./scripts/deployFresh.js --network kaia",
     "upgrade:mainnet": "hardhat run ./scripts/upgradeVaultCore.js --network kaia",
     "upgrade:mainnet:all": "hardhat run ./scripts/upgradeAll.js --network kaia",
@@ -36,10 +34,10 @@
     "setup:mainnet": "hardhat run ./scripts/setAPY.js --network kaia",
     
     "// === V1 LEGACY (DO NOT USE) ===": "",
-    "deploy:v1:testnet": "hardhat run ./scripts/deploy.js --network kairos",
-    "upgrade:v1:testnet": "hardhat run ./scripts/upgrade.js --network kairos",
-    "deploy:v1:mainnet": "hardhat run ./scripts/deploy.js --network kaia",
-    "upgrade:v1:mainnet": "hardhat run ./scripts/upgrade.js --network kaia"
+    "deploy:v1:testnet": "hardhat run ./scripts/deployV1.js --network kairos",
+    "upgrade:v1:testnet": "hardhat run scripts/upgradeV1.js --network kairos",
+    "deploy:v1:mainnet": "hardhat run ./scripts/deployV1.js --network kaia",
+    "upgrade:v1:mainnet": "hardhat run scripts/upgradeV1.js --network kaia"
   },
   "keywords": [],
   "author": "",
