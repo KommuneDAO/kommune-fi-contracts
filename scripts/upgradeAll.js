@@ -55,12 +55,26 @@ async function main() {
     // 1. Upgrade VaultCore
     console.log("1️⃣ Upgrading VaultCore...");
     try {
-        const VaultCore = await ethers.getContractFactory("VaultCore");
+        // Deploy LPCalculations library first
+        console.log("   📚 Deploying LPCalculations library...");
+        const LPCalculations = await ethers.getContractFactory("LPCalculations");
+        const lpCalc = await LPCalculations.deploy();
+        await lpCalc.waitForDeployment();
+        const lpCalcAddress = await lpCalc.getAddress();
+        console.log("   ✓ LPCalculations deployed at:", lpCalcAddress);
+        
+        // Get VaultCore factory with library linked
+        const VaultCore = await ethers.getContractFactory("VaultCore", {
+            libraries: {
+                LPCalculations: lpCalcAddress
+            }
+        });
+        
         const vaultCore = await upgrades.upgradeProxy(
             deployments.vaultCore,
             VaultCore,
             { 
-                unsafeAllow: ['delegatecall'],
+                unsafeAllow: ['delegatecall', 'external-library-linking'],
                 redeployImplementation: 'always'
             }
         );
