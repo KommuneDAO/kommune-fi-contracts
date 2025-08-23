@@ -125,7 +125,11 @@ INVESTMENT_PROFILE=balanced npx hardhat run scripts/deployWithProfile.js --netwo
 
 #### 4. Verify Deployment
 ```bash
-npx hardhat run scripts/tests/testDepositWithdraw.js --network kairos
+# Test STABLE mode
+npx hardhat run scripts/tests/testIntegratedStable.js --network kairos
+
+# Test BALANCED mode
+npx hardhat run scripts/tests/testIntegratedBalanced.js --network kairos
 ```
 
 ### Deployment Output
@@ -215,7 +219,8 @@ assert(await vaultCore.getTotalAssets() === expectedAssets);
 #### 2. Test Core Functionality
 ```bash
 # Run integration tests
-npx hardhat run scripts/tests/testDepositWithdraw.js --network kairos
+npx hardhat run scripts/tests/testIntegratedStable.js --network kairos
+npx hardhat run scripts/tests/testIntegratedBalanced.js --network kairos
 ```
 
 ## Adding New Storage Variables

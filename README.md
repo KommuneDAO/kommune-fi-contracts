@@ -91,6 +91,14 @@ npx hardhat test
 
 ### Integration Tests
 ```bash
+# Integrated tests (separated by investment mode)
+# Test STABLE mode (90% LST staking only)
+npx hardhat run scripts/tests/testIntegratedStable.js --network kairos
+
+# Test BALANCED mode (45% LST + 45% LP pools)
+npx hardhat run scripts/tests/testIntegratedBalanced.js --network kairos
+
+# Feature-specific tests
 # Test deposit and withdrawal flows
 npx hardhat run scripts/tests/testDepositWithdraw.js --network kairos
 

@@ -126,6 +126,8 @@ VaultCore (로직)
 - 커버리지: 핵심 기능
 
 ### 통합 테스트
+- STABLE 모드 테스트: `scripts/tests/testIntegratedStable.js`
+- BALANCED 모드 테스트: `scripts/tests/testIntegratedBalanced.js`
 - 입금/출금: `scripts/tests/testDepositWithdraw.js`
 - 언스테이크/클레임: `scripts/tests/testUnstakeClaim.js`
 - 업그레이드: `scripts/testUpgrades.js`

@@ -184,7 +184,11 @@ npx hardhat console --network kairos
 
 ### 2. Run Integration Test
 ```bash
-npx hardhat run scripts/tests/testDepositWithdraw.js --network kairos
+# Test STABLE mode
+npx hardhat run scripts/tests/testIntegratedStable.js --network kairos
+
+# Test BALANCED mode
+npx hardhat run scripts/tests/testIntegratedBalanced.js --network kairos
 ```
 
 ### 3. Test Small Deposit

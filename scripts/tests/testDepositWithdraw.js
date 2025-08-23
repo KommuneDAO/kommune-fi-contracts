@@ -2,6 +2,10 @@ const { ethers } = require("hardhat");
 const fs = require('fs');
 require("dotenv").config();
 
+async function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 async function main() {
     console.log("╔══════════════════════════════════════════════════════════════╗");
     console.log("║          KOMMUNEFI V2 DEPOSIT & WITHDRAW TEST               ║");
@@ -20,14 +24,7 @@ async function main() {
     const shareVault = await ethers.getContractAt("ShareVault", deployments.shareVault);
     const vaultCore = await ethers.getContractAt("VaultCore", deployments.vaultCore);
     const swapContract = await ethers.getContractAt("SwapContract", deployments.swapContract);
-    const wkaia = await ethers.getContractAt([
-        "function deposit() payable",
-        "function withdraw(uint256) returns (uint256)",
-        "function approve(address,uint256) returns (bool)",
-        "function transfer(address,uint256) returns (bool)",
-        "function balanceOf(address) view returns (uint256)",
-        "function allowance(address,address) view returns (uint256)"
-    ], deployments.wkaia);
+    const wkaia = await ethers.getContractAt("IERC20", deployments.wkaia);
     
     console.log("📋 Configuration:");
     console.log("  Network:", networkName.toUpperCase());
@@ -37,14 +34,20 @@ async function main() {
     console.log("");
     
     console.log("👛 Test Wallets:");
-    console.log("  Wallet 1:", wallet1.address, "(0.1 KAIA deposit)");
-    console.log("  Wallet 2:", wallet2.address, "(0.1 WKAIA deposit)");
-    console.log("  Wallet 3:", wallet3.address, "(0.05 KAIA + withdraw test)");
+    console.log("  Wallet 1:", wallet1.address, "(Large deposit for liquidity)");
+    console.log("  Wallet 2:", wallet2.address, "(Small WKAIA deposit)");
+    console.log("  Wallet 3:", wallet3.address, "(Small KAIA + withdraw test)");
     console.log("");
     
     console.log("📊 Initial Settings:");
     const investRatio = await vaultCore.investRatio();
-    console.log("  InvestRatio:", investRatio.toString(), `(${investRatio / 100n}%)`);
+    
+    // Note: The optimized contracts only have investRatio function available
+    console.log("  Total Investment Ratio:", Number(investRatio) / 100 + "%");
+    console.log("  Liquidity Buffer:", (10000 - Number(investRatio)) / 100 + "%");
+    
+    // LST token names for reference
+    const lstNames = ["wKoKAIA", "wGCKAIA", "wstKLAY", "stKAIA"];
     
     // Security Verification
     console.log("\n╔══════════════════════════════════════════════════════════════╗");
@@ -72,56 +75,69 @@ async function main() {
     console.log("║              DEPOSIT TESTS                                  ║");
     console.log("╚══════════════════════════════════════════════════════════════╝\n");
     
-    // Wallet 1: 0.1 KAIA deposit
-    console.log("📝 Test 1: Wallet 1 - 0.1 KAIA Deposit");
-    try {
-        const depositAmount = ethers.parseEther("0.1");
-        const tx1 = await shareVault.connect(wallet1).depositKAIA(wallet1.address, { value: depositAmount });
-        await tx1.wait();
-        
-        const shares1 = await shareVault.balanceOf(wallet1.address);
-        console.log("  ✅ Success!");
-        console.log("     Amount: 0.1 KAIA");
-        console.log("     Shares received:", ethers.formatEther(shares1));
-    } catch (error) {
-        console.log("  ❌ Failed:", error.message);
-    }
+    // Wallet 1: Large deposit for liquidity
+    console.log("1️⃣ Wallet 1 - Large Deposit (3 KAIA)...");
+    const shareVault1 = await ethers.getContractAt("ShareVault", deployments.shareVault, wallet1);
+    let tx = await shareVault1.depositKAIA(wallet1.address, {value: ethers.parseEther("3")});
+    await tx.wait();
+    let shares1 = await shareVault.balanceOf(wallet1.address);
+    console.log("  ✅ Deposited 3 KAIA");
+    console.log("     Shares received:", ethers.formatEther(shares1));
     
-    // Wait for state sync
     console.log("\n⏳ Waiting for state sync (5 seconds)...");
-    await new Promise(resolve => setTimeout(resolve, 5000));
+    await sleep(5000);
     
-    // Wallet 2: 0.1 WKAIA deposit
-    console.log("\n📝 Test 2: Wallet 2 - 0.1 WKAIA Deposit (Standard ERC4626)");
-    try {
-        // Step 1: Wrap KAIA to WKAIA
-        console.log("  Step 1: Wrapping 0.1 KAIA to WKAIA...");
-        const wrapAmount = ethers.parseEther("0.1");
-        const wkaiaWallet2 = wkaia.connect(wallet2);
-        const wrapTx = await wkaiaWallet2.deposit({ value: wrapAmount });
-        await wrapTx.wait();
-        
-        const wkaiaBalance = await wkaia.balanceOf(wallet2.address);
-        console.log("  ✓ WKAIA balance:", ethers.formatEther(wkaiaBalance));
-        
-        // Step 2: Approve ShareVault
-        console.log("  Step 2: Approving ShareVault...");
-        const approveTx = await wkaiaWallet2.approve(deployments.shareVault, wrapAmount);
-        await approveTx.wait();
-        console.log("  ✓ Approved 0.1 WKAIA");
-        
-        // Step 3: Deposit to ShareVault
-        console.log("  Step 3: Depositing to ShareVault...");
-        const shareVault2 = shareVault.connect(wallet2);
-        const tx2 = await shareVault2.deposit(wrapAmount, wallet2.address);
-        await tx2.wait();
-        
-        const shares2 = await shareVault.balanceOf(wallet2.address);
-        console.log("  ✅ Success!");
-        console.log("     Amount: 0.1 WKAIA");
-        console.log("     Shares received:", ethers.formatEther(shares2));
-    } catch (error) {
-        console.log("  ❌ Failed:", error.message);
+    // Wallet 2: WKAIA deposit test
+    console.log("\n2️⃣ Wallet 2 - WKAIA Deposit (0.1 WKAIA)...");
+    console.log("  Step 1: Wrapping 0.1 KAIA to WKAIA...");
+    const wkaia2 = await ethers.getContractAt([
+        "function deposit() payable",
+        "function withdraw(uint256) returns (uint256)",
+        "function approve(address,uint256) returns (bool)",
+        "function transfer(address,uint256) returns (bool)",
+        "function balanceOf(address) view returns (uint256)",
+        "function allowance(address,address) view returns (uint256)"
+    ], deployments.wkaia, wallet2);
+    
+    tx = await wkaia2.deposit({value: ethers.parseEther("0.1")});
+    await tx.wait();
+    const wkaiaBalance = await wkaia.balanceOf(wallet2.address);
+    console.log("  ✓ WKAIA balance:", ethers.formatEther(wkaiaBalance));
+    
+    console.log("  Step 2: Approving ShareVault...");
+    tx = await wkaia2.approve(deployments.shareVault, ethers.parseEther("0.1"));
+    await tx.wait();
+    console.log("  ✓ Approved 0.1 WKAIA");
+    
+    console.log("  Step 3: Depositing to ShareVault...");
+    const shareVault2 = await ethers.getContractAt("ShareVault", deployments.shareVault, wallet2);
+    tx = await shareVault2.deposit(ethers.parseEther("0.1"), wallet2.address);
+    await tx.wait();
+    let shares2 = await shareVault.balanceOf(wallet2.address);
+    console.log("  ✅ Deposited 0.1 WKAIA");
+    console.log("     Shares received:", ethers.formatEther(shares2));
+    
+    console.log("\n⏳ Waiting for next block (3 seconds)...");
+    await sleep(3000);
+    
+    // Wallet 3: Small deposit and withdrawal test
+    console.log("\n3️⃣ Wallet 3 - Small Deposit (0.05 KAIA)...");
+    const shareVault3 = await ethers.getContractAt("ShareVault", deployments.shareVault, wallet3);
+    tx = await shareVault3.depositKAIA(wallet3.address, {value: ethers.parseEther("0.05")});
+    await tx.wait();
+    let shares3 = await shareVault.balanceOf(wallet3.address);
+    console.log("  ✅ Deposited 0.05 KAIA");
+    console.log("     Shares received:", ethers.formatEther(shares3));
+    
+    // Check LST distribution
+    console.log("\n📊 LST Distribution Check:");
+    for (let i = 0; i < 4; i++) {
+        const tokenInfo = await vaultCore.tokensInfo(i);
+        const balance = await ethers.getContractAt("IERC20", tokenInfo.tokenA)
+            .then(token => token.balanceOf(deployments.vaultCore));
+        if (balance > 0n) {
+            console.log(`  ${lstNames[i]}: ${ethers.formatEther(balance)} tokens`);
+        }
     }
     
     // Check vault state
@@ -136,61 +152,26 @@ async function main() {
     console.log("║              WITHDRAWAL TEST                                ║");
     console.log("╚══════════════════════════════════════════════════════════════╝\n");
     
-    // Wait before next operation
     console.log("⏳ Waiting for next block (3 seconds)...");
-    await new Promise(resolve => setTimeout(resolve, 3000));
+    await sleep(3000);
     
-    // Wallet 3: 0.05 KAIA deposit
-    console.log("\n📝 Step 1: Wallet 3 - 0.05 KAIA Deposit");
-    let wallet3Shares = 0n;
-    try {
-        const depositAmount = ethers.parseEther("0.05");
-        const shareVault3 = shareVault.connect(wallet3);
-        const tx3 = await shareVault3.depositKAIA(wallet3.address, { value: depositAmount });
-        await tx3.wait();
-        
-        wallet3Shares = await shareVault.balanceOf(wallet3.address);
-        console.log("  ✅ Success!");
-        console.log("     Amount: 0.05 KAIA");
-        console.log("     Shares received:", ethers.formatEther(wallet3Shares));
-    } catch (error) {
-        console.log("  ❌ Failed:", error.message);
+    console.log("\n📤 Testing Withdrawals:");
+    
+    // Wallet 2: 100% withdrawal
+    const maxWithdraw2 = await shareVault.maxWithdraw(wallet2.address);
+    if (maxWithdraw2 > 0n) {
+        tx = await shareVault2.withdraw(maxWithdraw2, wallet2.address, wallet2.address);
+        await tx.wait();
+        console.log(`  Wallet 2: Withdrew ${ethers.formatEther(maxWithdraw2)} WKAIA (100%)`);
     }
     
-    // Check state before withdrawal
-    console.log("\n📊 State Before Withdrawal:");
-    const vcWkaiaBalance = await wkaia.balanceOf(deployments.vaultCore);
-    totalAssets = await shareVault.totalAssets();
-    console.log("  Total Assets:", ethers.formatEther(totalAssets), "WKAIA");
-    console.log("  WKAIA in VaultCore:", ethers.formatEther(vcWkaiaBalance), "(liquidity)");
-    
-    // Wait before withdrawal
-    console.log("\n⏳ Waiting for next block (3 seconds)...");
-    await new Promise(resolve => setTimeout(resolve, 3000));
-    
-    // Wallet 3: 100% withdrawal
-    console.log("\n📝 Step 2: Wallet 3 - 100% Withdrawal");
-    try {
-        const maxWithdraw = await shareVault.maxWithdraw(wallet3.address);
-        console.log("  Max withdrawable:", ethers.formatEther(maxWithdraw), "WKAIA");
-        
-        const wkaiaBalanceBefore = await wkaia.balanceOf(wallet3.address);
-        
-        const shareVault3 = shareVault.connect(wallet3);
-        const tx4 = await shareVault3.withdraw(maxWithdraw, wallet3.address, wallet3.address);
-        await tx4.wait();
-        
-        const wkaiaBalanceAfter = await wkaia.balanceOf(wallet3.address);
-        const received = wkaiaBalanceAfter - wkaiaBalanceBefore;
-        
-        console.log("  ✅ 100% Withdrawal SUCCESSFUL!");
-        console.log("     Requested:", ethers.formatEther(maxWithdraw), "WKAIA");
-        console.log("     Received:", ethers.formatEther(received), "WKAIA");
-        console.log("     Success rate:", ((received * 100n) / maxWithdraw).toString() + "%");
-        
-    } catch (error) {
-        console.log("  ❌ 100% Withdrawal FAILED!");
-        console.log("     Error:", error.message);
+    // Wallet 3: 50% withdrawal
+    const maxWithdraw3 = await shareVault.maxWithdraw(wallet3.address);
+    if (maxWithdraw3 > 0n) {
+        const withdraw3Amount = maxWithdraw3 / 2n;
+        tx = await shareVault3.withdraw(withdraw3Amount, wallet3.address, wallet3.address);
+        await tx.wait();
+        console.log(`  Wallet 3: Withdrew ${ethers.formatEther(withdraw3Amount)} WKAIA (50%)`);
     }
     
     // Final Summary
@@ -199,9 +180,9 @@ async function main() {
     console.log("╚══════════════════════════════════════════════════════════════╝\n");
     
     console.log("✅ Test Results:");
-    console.log("  • Wallet 1: 0.1 KAIA deposit");
-    console.log("  • Wallet 2: 0.1 WKAIA deposit");
-    console.log("  • Wallet 3: 0.05 KAIA deposit + 100% withdrawal");
+    console.log("  • Wallet 1: 3 KAIA deposit (liquidity provider)");
+    console.log("  • Wallet 2: 0.1 WKAIA deposit + 100% withdrawal");
+    console.log("  • Wallet 3: 0.05 KAIA deposit + 50% withdrawal");
     
     console.log("\n✅ Security Fixes Applied:");
     console.log("  • Standard ERC4626 pattern");

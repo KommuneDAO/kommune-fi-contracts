@@ -125,7 +125,11 @@ INVESTMENT_PROFILE=balanced npx hardhat run scripts/deployWithProfile.js --netwo
 
 #### 4. 배포 검증
 ```bash
-npx hardhat run scripts/tests/testDepositWithdraw.js --network kairos
+# STABLE 모드 테스트
+npx hardhat run scripts/tests/testIntegratedStable.js --network kairos
+
+# BALANCED 모드 테스트
+npx hardhat run scripts/tests/testIntegratedBalanced.js --network kairos
 ```
 
 ### 배포 결과
@@ -215,7 +219,8 @@ assert(await vaultCore.getTotalAssets() === expectedAssets);
 #### 2. 핵심 기능 테스트
 ```bash
 # 통합 테스트 실행
-npx hardhat run scripts/tests/testDepositWithdraw.js --network kairos
+npx hardhat run scripts/tests/testIntegratedStable.js --network kairos
+npx hardhat run scripts/tests/testIntegratedBalanced.js --network kairos
 ```
 
 ## 새 스토리지 변수 추가

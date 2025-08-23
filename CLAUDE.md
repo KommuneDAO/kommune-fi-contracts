@@ -225,18 +225,18 @@ await shareVault.withdraw(withdrawWKAIA, user, user);
 - `scripts/` - Essential deployment and configuration scripts
   - `deployV1.js` - V1 deployment (DO NOT MODIFY)
   - `upgradeV1.js` - V1 upgrade (DO NOT MODIFY)
-  - `deploySeparatedVault.js` - Deploy V2 (ShareVault + VaultCore)
-  - `upgradeSeparatedVault.js` - Upgrade V2
-  - `setupSeparatedVault.js` - Configure V2
-  - `deploySwapContract.js` - Deploy SwapContract
+  - `deployFresh.js` - Fresh deployment with profile selection
+  - `deployWithProfile.js` - Deploy with specific investment profile
+  - `upgradeAll.js` - Upgrade all contracts
+  - `upgradeVaultCore.js` - Upgrade VaultCore contract
+  - `upgradeShareVault.js` - Upgrade ShareVault contract
+  - `upgradeSwapContract.js` - Upgrade SwapContract
   - `setAPY.js` - Set APY values
-- `scripts/tests/` - All test and debug scripts
-  - `fullIntegrationTest.js` - Comprehensive test summary and validation
-  - `testMultiWalletDeposits.js` - Multi-wallet concurrent testing
-  - `testAPYChangeSimple.js` - APY dynamic change testing
-  - `testPerBlockLimit.js` - Security limit testing
-  - `testNativeKAIADeposit.js` - Native KAIA testing
-  - Other test scripts organized by feature
+  - `testUpgrades.js` - Test contract upgrades
+- `scripts/tests/` - Test scripts
+  - `testIntegratedStable.js` - STABLE mode integrated test (LST staking only)
+  - `testIntegratedBalanced.js` - BALANCED mode integrated test (LST + LP pools)
+  - `testUnstakeClaim.js` - Owner unstake/claim operations test
 
 ### LST Token Information
 1. **wKoKAIA** (Index 0)
@@ -622,6 +622,66 @@ require(block.number > lastDepositBlock[msg.sender], "Same block");
 - ✅ totalAssets includes LP token underlying value
 - ✅ Proportional value matches actual exitPool amounts
 
+### Integrated Test Separation (2025-08-23)
+
+**✅ RESOLVED: Integrated tests separated into STABLE and BALANCED mode tests**
+
+#### Issue Summary:
+- **Symptom**: Wallet 2 deposit failed after switching from STABLE to BALANCED mode
+- **Root Cause**: Fresh deployment in middle of test invalidated contract instances
+- **Resolution**: Separated tests by investment mode to avoid fresh deployment issues
+
+#### Problem Details:
+1. **Original Test Flow**:
+   - Fresh deployment with STABLE mode
+   - 3-wallet test in STABLE mode
+   - Fresh deployment with BALANCED mode ← **Problem: invalidated contracts**
+   - 3-wallet test in BALANCED mode failed
+
+2. **Technical Issue**:
+   - `deployFresh.js` creates completely new contract addresses
+   - JavaScript contract instances still pointed to old addresses
+   - Transactions failed with reverts on non-existent contracts
+
+#### Solution Applied:
+Created two separate test files:
+1. **`testIntegratedStable.js`**:
+   - Fresh deployment with STABLE profile (90% LST staking)
+   - 3-wallet deposit/withdraw test
+   - Optional unstake/claim test (set `runUnstakeClaim = true`)
+   - No mode switching, clean test environment
+
+2. **`testIntegratedBalanced.js`**:
+   - Uses existing deployment (no fresh deploy)
+   - Switches to BALANCED profile (45% LST + 45% LP pools)
+   - 3-wallet deposit/withdraw test
+   - Verifies LP token creation and removal
+   - Tests Balancer pool integration
+
+#### Key Benefits:
+- ✅ No contract instance invalidation
+- ✅ Clear separation of test concerns
+- ✅ Each mode tested in isolation
+- ✅ Easier debugging and maintenance
+- ✅ Can run tests independently
+
+#### Usage:
+```bash
+# Test STABLE mode only (testnet)
+npm run test:stable:testnet
+# or directly:
+npx hardhat run scripts/tests/testIntegratedStable.js --network kairos
+
+# Test BALANCED mode only (testnet)
+npm run test:balanced:testnet
+# or directly:
+npx hardhat run scripts/tests/testIntegratedBalanced.js --network kairos
+
+# For mainnet testing
+npm run test:stable:mainnet
+npm run test:balanced:mainnet
+```
+
 ### Balancer JoinPool userData Encoding (2025-08-20)
 
 **⚠️ CRITICAL: userData encoding for Balancer joinPool must exclude BPT token amounts**
@@ -681,3 +741,4 @@ userData: abi.encode(1, amountsForUserData, 0)  // JOIN_KIND_EXACT_TOKENS_IN_FOR
 - **BALANCED investment type implemented with Balancer pool integration (2025-08-20)**
 - **JoinPool userData encoding fixed - exclude BPT from userData array (2025-08-20)**
 - **ExitPool implementation completed with EXACT_BPT_IN_FOR_ONE_TOKEN_OUT (2025-08-20)**
+- **Integrated tests separated by mode - testIntegratedStable.js and testIntegratedBalanced.js (2025-08-23)**

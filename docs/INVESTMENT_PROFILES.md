@@ -159,9 +159,9 @@ await vaultCore.setInvestmentRatios(
 
 ### Test Scripts
 
-- `scripts/temp/testInvestmentRatios.js` - Test ratio functionality
-- `scripts/testIntegrated.js` - Full integration test with stable profile
-- `scripts/deployWithProfile.js` - Deploy with specific profile
+- `scripts/tests/testIntegratedStable.js` - Integration test with stable profile
+- `scripts/tests/testIntegratedBalanced.js` - Integration test with balanced profile
+- `scripts/deployFresh.js` - Deploy with specific profile
 
 ### Test Coverage
 

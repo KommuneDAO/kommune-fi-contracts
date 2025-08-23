@@ -91,6 +91,14 @@ npx hardhat test
 
 ### 통합 테스트
 ```bash
+# 투자 모드별로 분리된 통합 테스트
+# STABLE 모드 테스트 (90% LST 스테이킹만)
+npx hardhat run scripts/tests/testIntegratedStable.js --network kairos
+
+# BALANCED 모드 테스트 (45% LST + 45% LP 풀)
+npx hardhat run scripts/tests/testIntegratedBalanced.js --network kairos
+
+# 기능별 테스트
 # 입출금 플로우 테스트
 npx hardhat run scripts/tests/testDepositWithdraw.js --network kairos
 

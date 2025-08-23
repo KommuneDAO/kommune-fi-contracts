@@ -126,6 +126,8 @@ VaultCore (Logic)
 - Coverage: Core functionality
 
 ### Integration Tests
+- STABLE Mode Test: `scripts/tests/testIntegratedStable.js`
+- BALANCED Mode Test: `scripts/tests/testIntegratedBalanced.js`
 - Deposit/Withdraw: `scripts/tests/testDepositWithdraw.js`
 - Unstake/Claim: `scripts/tests/testUnstakeClaim.js`
 - Upgrades: `scripts/testUpgrades.js`

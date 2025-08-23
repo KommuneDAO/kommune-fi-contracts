@@ -184,7 +184,11 @@ npx hardhat console --network kairos
 
 ### 2. 통합 테스트 실행
 ```bash
-npx hardhat run scripts/tests/testDepositWithdraw.js --network kairos
+# STABLE 모드 테스트
+npx hardhat run scripts/tests/testIntegratedStable.js --network kairos
+
+# BALANCED 모드 테스트
+npx hardhat run scripts/tests/testIntegratedBalanced.js --network kairos
 ```
 
 ### 3. 소액 입금 테스트

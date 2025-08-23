@@ -1,166 +1,118 @@
 # Test Scripts
 
-KommuneFi 프로토콜 추가 테스트 스크립트 모음
+KommuneFi 프로토콜 테스트 스크립트 모음
 
-## 🏃 stressTestDeposits.js
+## 📌 통합 테스트 (Integrated Tests)
 
-**목적**: 대량 입금 및 동시성 스트레스 테스트
+### testIntegratedStable.js
+**목적**: STABLE 모드 통합 테스트 (90% LST 스테이킹)
 
-**테스트 시나리오**:
-- 동시 다중 사용자 입금 (10-100명)
-- 빠른 연속 입금 처리
-- 가스 한계 테스트
-- 트랜잭션 충돌 처리
-- 메모리 풀 혼잡 상황 시뮬레이션
+**테스트 플로우**:
+1. Fresh deployment with STABLE profile
+2. 3-wallet deposit/withdraw test
+3. Optional unstake/claim test (set `runUnstakeClaim = true`)
+4. LST distribution verification
 
 **사용법**:
 ```bash
-npx hardhat run scripts/tests/stressTestDeposits.js --network kairos
+npx hardhat run scripts/tests/testIntegratedStable.js --network kairos
+# or using npm script:
+npm run test:stable:testnet
 ```
 
-**설정 가능 파라미터**:
-- `CONCURRENT_USERS`: 동시 사용자 수 (기본: 20)
-- `DEPOSIT_AMOUNT`: 사용자당 입금액 (기본: 0.1 KAIA)
-- `BATCH_SIZE`: 배치 크기 (기본: 5)
+### testIntegratedBalanced.js
+**목적**: BALANCED 모드 통합 테스트 (45% LST + 45% LP 풀)
 
-**성공 기준**:
-- 모든 입금 성공
-- 가스 사용량 < 300,000 per tx
-- 처리 시간 < 60초
-- Share 계산 정확도 100%
+**테스트 플로우**:
+1. Use existing deployment (no fresh deploy)
+2. Switch to BALANCED profile
+3. 3-wallet deposit/withdraw test  
+4. LP token creation/removal verification
+5. Balancer pool integration test
+
+**사용법**:
+```bash
+npx hardhat run scripts/tests/testIntegratedBalanced.js --network kairos
+# or using npm script:
+npm run test:balanced:testnet
+```
 
 ---
 
-## ⏱️ testDepositWithDelay.js
+## 🧪 기능별 테스트 (Feature Tests)
 
-**목적**: 지연된 입금 및 시간 기반 시나리오 테스트
+### testDepositWithdraw.js
+**목적**: 입출금 플로우 단독 테스트
 
-**테스트 시나리오**:
-- 입금 간 시간 지연 (1분, 5분, 1시간)
-- APY 변경 중 입금
-- 블록 타임스탬프 변화 영향
-- 리워드 누적 중 입금
-- 장기간 유휴 후 입금
-
-**사용법**:
-```bash
-npx hardhat run scripts/tests/testDepositWithDelay.js --network kairos
-```
-
-**설정 가능 파라미터**:
-- `DELAY_SECONDS`: 입금 간 지연 시간 (기본: 300)
-- `NUM_DEPOSITS`: 총 입금 횟수 (기본: 5)
-- `APY_CHANGE`: APY 변경 여부 (기본: true)
-
-**검증 항목**:
-- Share 가격 변화 추적
-- 리워드 누적 정확성
-- 시간 가중 수익률
-- 지연 후 상태 일관성
-
----
-
-## 📈 testProgressiveWithdrawal.js
-
-**목적**: 점진적 출금 패턴 및 부분 출금 테스트
-
-**테스트 시나리오**:
-- 10% → 30% → 50% → 100% 점진적 출금
-- 다양한 출금 비율 조합
-- 잔액 부족 상황 처리
-- 슬리피지 영향 분석
-- 다중 LST 스왑 최적화
+**테스트 플로우**:
+1. KAIA/WKAIA 입금 테스트
+2. 출금 기능 테스트
+3. Share 계산 검증
+4. 수수료 및 슬리피지 확인
 
 **사용법**:
 ```bash
-npx hardhat run scripts/tests/testProgressiveWithdrawal.js --network kairos
+npx hardhat run scripts/tests/testDepositWithdraw.js --network kairos
 ```
 
-**테스트 단계**:
-1. 초기 대량 입금 (3 KAIA)
-2. 소규모 사용자 입금 (0.1-1 KAIA)
-3. 점진적 출금 시작
-   - Stage 1: 10% 출금
-   - Stage 2: 30% 출금
-   - Stage 3: 50% 출금
-   - Stage 4: 나머지 전액
-4. 각 단계별 가스 사용량 측정
-5. 최종 상태 검증
+### testUnstakeClaim.js
+**목적**: Owner의 언스테이크/클레임 작업 테스트
 
-**성공 기준**:
-- 모든 출금 단계 성공
-- 슬리피지 < 10%
-- 잔액 정확도 99.9%
-- 가스 최적화 확인
-
----
-
-## 🔄 testStableDepositsWithdrawals.js
-
-**목적**: 안정적인 입출금 사이클 및 장기 운영 테스트
-
-**테스트 시나리오**:
-- 24시간 연속 입출금 시뮬레이션
-- 랜덤 입출금 패턴
-- 다양한 사용자 행동 패턴
-- 풀 사이클 안정성 검증
-- 장기 운영 시뮬레이션
+**테스트 플로우**:
+1. wKoKAIA를 KoKAIA로 unwrap
+2. Owner가 KoKAIA unstake 실행
+3. 10분 대기 (테스트넷)
+4. Owner가 claim 실행
+5. WKAIA가 VaultCore에 남아있는지 확인
 
 **사용법**:
 ```bash
-npx hardhat run scripts/tests/testStableDepositsWithdrawals.js --network kairos
+npx hardhat run scripts/tests/testUnstakeClaim.js --network kairos
 ```
-
-**시뮬레이션 패턴**:
-- **Conservative User**: 대량 입금, 장기 보유, 전액 출금
-- **Active Trader**: 빈번한 소액 입출금
-- **Whale**: 대량 입출금으로 시장 영향
-- **Average User**: 일반적인 사용 패턴
-
-**모니터링 지표**:
-- TVL 변화 추이
-- Share 가격 안정성
-- 가스 사용 패턴
-- 오류 발생률
-- 처리 시간 분포
 
 ---
 
 ## 🎯 테스트 실행 가이드
 
-### 전체 테스트 스위트 실행
+### 통합 테스트 실행
 ```bash
-# 순차 실행 (권장)
-npm run test:testnet
+# STABLE 모드 테스트
+npm run test:stable:testnet
 
-# 개별 실행
-npx hardhat run scripts/tests/stressTestDeposits.js --network kairos
-npx hardhat run scripts/tests/testDepositWithDelay.js --network kairos
-npx hardhat run scripts/tests/testProgressiveWithdrawal.js --network kairos
-npx hardhat run scripts/tests/testStableDepositsWithdrawals.js --network kairos
+# BALANCED 모드 테스트  
+npm run test:balanced:testnet
+
+# 메인넷 테스트
+npm run test:stable:mainnet
+npm run test:balanced:mainnet
 ```
 
-### 메인넷 테스트 (주의 필요)
+### 기능별 테스트
 ```bash
-# 소규모 테스트만 실행
-CONCURRENT_USERS=3 npx hardhat run scripts/tests/stressTestDeposits.js --network kaia
+# 입출금 테스트
+npx hardhat run scripts/tests/testDepositWithdraw.js --network kairos
+
+# 언스테이크/클레임 테스트
+npx hardhat run scripts/tests/testUnstakeClaim.js --network kairos
+
+# 업그레이드 테스트 (scripts 폴더에 위치)
+npx hardhat run scripts/testUpgrades.js --network kairos
 ```
 
 ## ⚠️ 주의사항
 
 1. **테스트넷 우선**: 모든 테스트는 테스트넷에서 먼저 실행
-2. **가스비 준비**: 스트레스 테스트는 많은 가스비 필요
-3. **시간 소요**: 일부 테스트는 장시간 소요 (최대 1시간)
-4. **환경 변수**: 테스트 파라미터는 환경 변수로 조정 가능
-5. **로그 저장**: 중요 테스트 결과는 로그 파일로 저장 권장
+2. **가스비 준비**: 통합 테스트는 fresh deployment 포함하여 가스비 필요
+3. **시간 소요**: unstake/claim 테스트는 10분 이상 소요
+4. **순서 중요**: BALANCED 테스트는 기존 deployment 필요
 
 ## 📊 결과 해석
 
 ### 성공 지표
 - ✅ 모든 트랜잭션 성공
-- ✅ Share 계산 오차 < 0.1%
-- ✅ 가스 사용 예측 범위 내
-- ✅ 처리 시간 목표 달성
+- ✅ Share 계산 정확도 확인
+- ✅ LST 분배 정상 작동
+- ✅ LP 토큰 생성/제거 확인 (BALANCED 모드)
 
 ### 실패 시 대응
 - ❌ 트랜잭션 실패 → 가스 한도 조정
@@ -170,7 +122,9 @@ CONCURRENT_USERS=3 npx hardhat run scripts/tests/stressTestDeposits.js --network
 
 ## 🔗 관련 문서
 
-- [통합 테스트](testIntegrated.js)
-- [유틸리티 도구](../utils/README.md)
+- [STABLE 모드 통합 테스트](./testIntegratedStable.js)
+- [BALANCED 모드 통합 테스트](./testIntegratedBalanced.js)
+- [입출금 테스트](./testDepositWithdraw.js)
+- [언스테이크/클레임 테스트](./testUnstakeClaim.js)
 - [메인 README](../../README.md)
 - [기술 문서](../../CLAUDE.md)

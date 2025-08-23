@@ -19,8 +19,10 @@
     "deploy:testnet:claim": "hardhat run ./scripts/deployClaimManager.js --network kairos",
     "upgrade:testnet:claim": "hardhat run ./scripts/upgradeClaimManager.js --network kairos",
     "setup:testnet": "hardhat run ./scripts/setAPY.js --network kairos",
-    "test:testnet": "hardhat run scripts/tests/testIntegrated.js --network kairos",
-    "test:mainnet": "hardhat run scripts/tests/testIntegrated.js --network kaia",
+    "test:stable:testnet": "hardhat run scripts/testIntegratedStable.js --network kairos",
+    "test:balanced:testnet": "hardhat run scripts/testIntegratedBalanced.js --network kairos",
+    "test:stable:mainnet": "hardhat run scripts/testIntegratedStable.js --network kaia",
+    "test:balanced:mainnet": "hardhat run scripts/testIntegratedBalanced.js --network kaia",
     
     "// === V2 DEPLOYMENT (CURRENT) - MAINNET ===": "",
     "deploy:mainnet": "hardhat run ./scripts/deployFresh.js --network kaia",
