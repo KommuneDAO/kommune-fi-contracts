@@ -170,7 +170,7 @@ CONCURRENT_USERS=3 npx hardhat run scripts/tests/stressTestDeposits.js --network
 
 ## 🔗 관련 문서
 
-- [통합 테스트](../testIntegrated.js)
+- [통합 테스트](testIntegrated.js)
 - [유틸리티 도구](../utils/README.md)
 - [메인 README](../../README.md)
 - [기술 문서](../../CLAUDE.md)
