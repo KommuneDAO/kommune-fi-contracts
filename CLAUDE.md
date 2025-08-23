@@ -230,7 +230,7 @@ await shareVault.withdraw(withdrawWKAIA, user, user);
 ### Scripts Organization
 - `scripts/` - Essential deployment and configuration scripts
   - `deployFreshStable.js` - Deploy fresh V2 with STABLE profile (90% LST)
-  - `deployFreshBalanced.js` - Deploy fresh V2 with BALANCED profile (45% LST + 45% LP)
+  - `deployFreshBalanced.js` - Deploy fresh V2 with BALANCED profile (45% LST remains + 45% to LP)
   - `upgradeAll.js` - Upgrade all V2 contracts (supports PROFILE env var)
   - `upgradeShareVault.js` - Upgrade ShareVault only (supports PROFILE env var)
   - `upgradeVaultCore.js` - Upgrade VaultCore only (supports PROFILE env var)
@@ -271,6 +271,14 @@ await shareVault.withdraw(withdrawWKAIA, user, user);
 5. **Deployment info is in `deployments-{network}.json`**
    - Kairos testnet: `deployments-kairos.json`
    - Kaia mainnet: `deployments-kaia.json`
+
+### Investment Profile Ratios Explained (2025-08-23):
+- **investRatio**: Percentage of total WKAIA to convert to LSTs (e.g., 90%)
+- **balancedRatio**: Percentage of LSTs to add to LP pools (e.g., 50%)
+- **Example**: With investRatio=90% and balancedRatio=50%:
+  - 10% remains as WKAIA liquidity buffer
+  - 45% becomes LST and stays as LST (90% × 50%)
+  - 45% becomes LST then goes to LP pools (90% × 50%)
 
 ### Key Achievements (2025-08-18):
 - ✅ Contract size issue resolved with separated architecture
@@ -657,7 +665,7 @@ Created two separate test files:
 
 2. **`testIntegratedBalanced.js`**:
    - Uses existing deployment (no fresh deploy)
-   - Switches to BALANCED profile (45% LST + 45% LP pools)
+   - Switches to BALANCED profile (50% of LST → LP, 50% remains as LST)
    - 3-wallet deposit/withdraw test
    - Verifies LP token creation and removal
    - Tests Balancer pool integration

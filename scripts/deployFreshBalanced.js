@@ -158,13 +158,13 @@ async function main() {
     console.log("\n9️⃣ Setting investment ratios for BALANCED profile...");
     await vaultCore.setInvestmentRatios(
         9000,  // 90% total investment ratio
-        5000,  // 50% to balanced (45% LST + 45% LP)
+        5000,  // 50% of LST to balanced (LP pools)
         0      // 0% to aggressive
     );
     console.log("   ✅ Investment ratios configured:");
     console.log("      - Total Investment: 90%");
-    console.log("      - Balanced (LST+LP): 45% each");
-    console.log("      - Stable (LST only): 45%");
+    console.log("      - Balanced: 50% of LST → LP (45% of total)");
+    console.log("      - Stable: 50% of LST remains (45% of total)");
     console.log("      - Liquidity Buffer: 10%");
     
     // 10. Save deployment addresses
@@ -177,8 +177,8 @@ async function main() {
     newDeployments.profile = "balanced";
     newDeployments.configuration = {
         investRatio: 9000,
-        stableRatio: 4500,  // Effective 45% to LST
-        balancedRatio: 5000, // 50% of 90% = 45%
+        stableRatio: 4500,  // 50% of LST remains as LST (45% of total)
+        balancedRatio: 5000, // 50% of LST goes to LP (45% of total)
         aggressiveRatio: 0
     };
     
@@ -233,7 +233,8 @@ async function main() {
     console.log("  WKAIA:", newDeployments.wkaia);
     console.log("\n📊 Investment Profile: BALANCED");
     console.log("  Total Investment: 90%");
-    console.log("  Balanced Strategy: 45% LST + 45% LP");
+    console.log("  Balanced Strategy: 50% of LST → LP (45% of total)");
+    console.log("  Stable Strategy: 50% of LST remains (45% of total)");
     console.log("  Liquidity Buffer: 10%");
     console.log("\n💡 Next Steps:");
     console.log("  1. Run balanced integration tests: npx hardhat run scripts/tests/testIntegratedBalanced.js --network", networkName);

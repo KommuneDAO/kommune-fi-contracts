@@ -21,7 +21,7 @@ npm run test:stable:testnet
 ```
 
 ### testIntegratedBalanced.js
-**목적**: BALANCED 모드 통합 테스트 (45% LST + 45% LP 풀)
+**목적**: BALANCED 모드 통합 테스트 (LST의 50% → LP, 50%는 LST로 유지)
 
 **테스트 플로우**:
 1. Use existing deployment (no fresh deploy)

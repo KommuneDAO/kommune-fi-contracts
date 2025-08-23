@@ -119,7 +119,7 @@ INVESTMENT_PROFILE=conservative npx hardhat run scripts/deployWithProfile.js --n
 # Stable profile (90% LST, 10% liquidity) - DEFAULT
 INVESTMENT_PROFILE=stable npx hardhat run scripts/deployWithProfile.js --network kairos
 
-# Balanced profile (45% LST, 45% LP, 10% liquidity)
+# Balanced profile (90% to LST, then 50% of LST → LP = 45% LST + 45% LP + 10% liquidity)
 INVESTMENT_PROFILE=balanced npx hardhat run scripts/deployWithProfile.js --network kairos
 ```
 

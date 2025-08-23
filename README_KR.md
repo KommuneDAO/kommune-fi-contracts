@@ -95,7 +95,7 @@ npx hardhat test
 # STABLE 모드 테스트 (90% LST 스테이킹만)
 npx hardhat run scripts/tests/testIntegratedStable.js --network kairos
 
-# BALANCED 모드 테스트 (45% LST + 45% LP 풀)
+# BALANCED 모드 테스트 (LST의 50% → LP, 50%는 LST로 유지)
 npx hardhat run scripts/tests/testIntegratedBalanced.js --network kairos
 
 # 기능별 테스트
@@ -127,8 +127,10 @@ npx hardhat run scripts/testUpgrades.js --network kairos
 |--------|-------------|---------------|------------|--------|
 | 보수적 | 30% | 0% | 0% | 70% |
 | 안정적 | 90% | 0% | 0% | 10% |
-| 균형 | 45% | 45% | 0% | 10% |
+| 균형 | 45%* | 45%* | 0% | 10% |
 | 성장 | 30% | 30% | 30% | 10% |
+
+*참고: 균형 프로필에서는 먼저 90%를 LST로 변환한 후, 그 LST의 50%를 LP 풀에 추가합니다
 
 ### APY 분배
 현재 스테이킹 보상을 기반으로 4개 LST에 걸쳐 설정 가능:

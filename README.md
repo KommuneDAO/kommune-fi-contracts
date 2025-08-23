@@ -95,7 +95,7 @@ npx hardhat test
 # Test STABLE mode (90% LST staking only)
 npx hardhat run scripts/tests/testIntegratedStable.js --network kairos
 
-# Test BALANCED mode (45% LST + 45% LP pools)
+# Test BALANCED mode (50% of LST → LP, 50% remains as LST)
 npx hardhat run scripts/tests/testIntegratedBalanced.js --network kairos
 
 # Feature-specific tests
@@ -127,8 +127,10 @@ npx hardhat run scripts/testUpgrades.js --network kairos
 |---------|-------------|---------------|------------|-----------|
 | Conservative | 30% | 0% | 0% | 70% |
 | Stable | 90% | 0% | 0% | 10% |
-| Balanced | 45% | 45% | 0% | 10% |
+| Balanced | 45%* | 45%* | 0% | 10% |
 | Growth | 30% | 30% | 30% | 10% |
+
+*Note: In Balanced profile, 90% is converted to LST first, then 50% of that LST goes to LP pools
 
 ### APY Distribution
 Configurable across 4 LSTs based on current staking rewards:
