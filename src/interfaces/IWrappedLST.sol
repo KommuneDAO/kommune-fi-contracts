@@ -10,4 +10,6 @@ interface IWrappedLST {
     function unwrap(uint256 amount) external returns (uint256);
     function getWrappedAmount(uint256 amount) external view returns (uint256);
     function getUnwrappedAmount(uint256 amount) external view returns (uint256);
+    function getGCKLAYByWGCKLAY(uint256 amount) external view returns (uint256);
+    function getWGCKLAYByGCKLAY(uint256 amount) external view returns (uint256);
 }

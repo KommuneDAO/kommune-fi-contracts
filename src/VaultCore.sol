@@ -101,10 +101,10 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
             0x42952B873ed6f7f0A7E4992E2a9818E3A9001995
         ];
         address[4] memory assets = [
-            0xA1338309658D3Da331C747518d0bb414031F22fd,
-            0x999999999939Ba65AbB254339eEc0b2A0daC80E9,
-            0xF80F2b22932fCEC6189b9153aA18662b15CC9C00,
-            0x42952B873ed6f7f0A7E4992E2a9818E3A9001995
+            0xA1338309658D3Da331C747518d0bb414031F22fd, // KoKAIA - Kommune Dao
+            0x999999999939Ba65AbB254339eEc0b2A0daC80E9, // GCKAIA - SwapScanner
+            0xF80F2b22932fCEC6189b9153aA18662b15CC9C00, // stKLAY - Kracker Labs
+            0x42952B873ed6f7f0A7E4992E2a9818E3A9001995  // stKAIA - Lair Finance
         ];
         address[4] memory tokenAs = [
             0xdEC2Cc84f0a37Ef917f63212FE8ba7494b0E4B15,
@@ -134,10 +134,10 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
             0x4C0d434C7DD74491A52375163a7b724ED387d0b6
         ];
         address[4] memory assets = [
-            0xb15782EFbC2034E366670599F3997f94c7333FF9,
-            0x4EC04F4D46D7e34EBf0C3932B65068168FDcE7f6,
-            0x524dCFf07BFF606225A4FA76AFA55D705B052004,
-            0x45886b01276c45Fe337d3758b94DD8D7F3951d97
+            0xb15782EFbC2034E366670599F3997f94c7333FF9, // KoKAIA - Kommune DAO
+            0x4EC04F4D46D7e34EBf0C3932B65068168FDcE7f6, // GCKAIA - SwapScanner
+            0x524dCFf07BFF606225A4FA76AFA55D705B052004, // stKLAY - Kracker Labs
+            0x45886b01276c45Fe337d3758b94DD8D7F3951d97  // stKAIA - Lair Finance
         ];
         address[4] memory tokenAs = [
             0x9a93e2fcDEBE43d0f8205D1cd255D709B7598317,
@@ -186,22 +186,24 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
             
             uint256 lstBalance = 0;
             
-            // Get wrapped token balance (tokenA)
-            if (tokensInfo[i].tokenA != address(0)) {
+            // Get unwrapped amount from wrapped token balance (tokenA) - except stKAIA (no wrapped token)
+            if (i < 3 && tokensInfo[i].tokenA != address(0)) {
                 try IERC20(tokensInfo[i].tokenA).balanceOf(address(this)) returns (uint256 balance) {
-                    lstBalance += balance;
+                    // The exchange rate between unwrapped and wrapped LST is not 1. (Not 1 vs. 1)
+                    // wKoKAIA , wsdKLAY
+                    if (i == 0 || i == 2) lstBalance += IWrappedLST(tokensInfo[i].tokenA).getUnwrappedAmount(balance);
+                    // GCKAIA
+                    else lstBalance += IWrappedLST(tokensInfo[i].tokenA).getGCKLAYByWGCKLAY(balance);
                 } catch {
                     // Skip if balance call fails
                 }
             }
             
-            // For LSTs with separate unwrapped version (not stKAIA)
-            if (i < 3 && tokensInfo[i].asset != tokensInfo[i].tokenA) {
-                try IERC20(tokensInfo[i].asset).balanceOf(address(this)) returns (uint256 balance) {
-                    lstBalance += balance;
-                } catch {
-                    // Skip if balance call fails
-                }
+            // For LSTs
+            try IERC20(tokensInfo[i].asset).balanceOf(address(this)) returns (uint256 balance) {
+                lstBalance += balance;
+            } catch {
+                // Skip if balance call fails
             }
             
             // LP tokens are handled separately after the loop
