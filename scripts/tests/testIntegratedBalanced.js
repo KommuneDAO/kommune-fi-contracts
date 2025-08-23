@@ -1,9 +1,23 @@
 const { ethers } = require("hardhat");
 const fs = require('fs');
+const { execSync } = require('child_process');
 require("dotenv").config();
 
 async function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function runSubScript(scriptPath, description) {
+    console.log(`\n🚀 Running: ${description}`);
+    try {
+        execSync(`npx hardhat run ${scriptPath} --network kairos`, {
+            stdio: 'inherit'
+        });
+        console.log(`✅ ${description} completed\n`);
+    } catch (error) {
+        console.error(`❌ ${description} failed:`, error.message);
+        throw error;
+    }
 }
 
 async function main() {
@@ -12,53 +26,84 @@ async function main() {
     console.log("╚══════════════════════════════════════════════════════════════╝\n");
 
     console.log("📋 Test Plan:");
-    console.log("  1. Use existing deployment or deploy new contracts");
-    console.log("  2. Switch to BALANCED profile");
-    console.log("  3. Test with 3 wallets - deposit & withdraw");
-    console.log("  4. Verify add liquidity success");
-    console.log("  5. Verify remove liquidity fund recovery");
+    console.log("  1. Deploy fresh BALANCED contracts");
+    console.log("  2. Test with 3 wallets - deposit & withdraw");
+    console.log("  3. Verify add liquidity success");
+    console.log("  4. Verify remove liquidity fund recovery");
     console.log("");
 
     const wallet1 = new ethers.Wallet(process.env.KAIROS_PRIVATE_KEY, ethers.provider);
     const wallet2 = new ethers.Wallet(process.env.TESTER1_PRIV_KEY, ethers.provider);
     const wallet3 = new ethers.Wallet(process.env.TESTER2_PRIV_KEY, ethers.provider);
 
+    // Check wallet balances before starting
+    console.log("💰 Checking wallet balances...");
+    const balance1 = await ethers.provider.getBalance(wallet1.address);
+    const balance2 = await ethers.provider.getBalance(wallet2.address);
+    const balance3 = await ethers.provider.getBalance(wallet3.address);
+    
+    console.log(`  Wallet 1: ${ethers.formatEther(balance1)} KAIA (need 3.0 KAIA)`);
+    console.log(`  Wallet 2: ${ethers.formatEther(balance2)} KAIA (need 0.5 KAIA)`);
+    console.log(`  Wallet 3: ${ethers.formatEther(balance3)} KAIA (need 0.1 KAIA)`);
+    
+    // Check if balances are sufficient
+    const minBalance1 = ethers.parseEther("3.1"); // 3 KAIA + gas
+    const minBalance2 = ethers.parseEther("0.6"); // 0.5 KAIA + gas
+    const minBalance3 = ethers.parseEther("0.2"); // 0.1 KAIA + gas
+    
+    if (balance1 < minBalance1) {
+        console.log("\n❌ ERROR: Wallet 1 has insufficient balance!");
+        console.log(`   Current: ${ethers.formatEther(balance1)} KAIA`);
+        console.log(`   Required: ${ethers.formatEther(minBalance1)} KAIA (including gas)`);
+        console.log(`   Please fund wallet: ${wallet1.address}`);
+        process.exit(1);
+    }
+    
+    if (balance2 < minBalance2) {
+        console.log("\n❌ ERROR: Wallet 2 has insufficient balance!");
+        console.log(`   Current: ${ethers.formatEther(balance2)} KAIA`);
+        console.log(`   Required: ${ethers.formatEther(minBalance2)} KAIA (including gas)`);
+        console.log(`   Please fund wallet: ${wallet2.address}`);
+        process.exit(1);
+    }
+    
+    if (balance3 < minBalance3) {
+        console.log("\n❌ ERROR: Wallet 3 has insufficient balance!");
+        console.log(`   Current: ${ethers.formatEther(balance3)} KAIA`);
+        console.log(`   Required: ${ethers.formatEther(minBalance3)} KAIA (including gas)`);
+        console.log(`   Please fund wallet: ${wallet3.address}`);
+        process.exit(1);
+    }
+    
+    console.log("✅ All wallets have sufficient balance\n");
+
+    // ═══════════════════════════════════════════════════════════════════
+    // STEP 1: DEPLOY FRESH CONTRACTS
+    // ═══════════════════════════════════════════════════════════════════
+
+    console.log("╔══════════════════════════════════════════════════════════════╗");
+    console.log("║   STEP 1: DEPLOY FRESH CONTRACTS                            ║");
+    console.log("╚══════════════════════════════════════════════════════════════╝\n");
+
+    console.log("📦 Deploying fresh contracts for BALANCED test...\n");
+
+    // Deploy using deployFreshBalanced.js
+    await runSubScript('scripts/deployFreshBalanced.js', 'Fresh BALANCED Deployment');
+
     // Load deployment info
     const chainId = (await ethers.provider.getNetwork()).chainId;
     const networkName = chainId === 8217n ? "kaia" : "kairos";
-    const deployments = JSON.parse(fs.readFileSync(`deployments-${networkName}.json`, 'utf8'));
+    const deployments = JSON.parse(fs.readFileSync(`deployments-balanced-${networkName}.json`, 'utf8'));
 
     const shareVault = await ethers.getContractAt("ShareVault", deployments.shareVault);
     const vaultCore = await ethers.getContractAt("VaultCore", deployments.vaultCore);
     const wkaia = await ethers.getContractAt("IERC20", deployments.wkaia);
 
-    console.log("📋 Using existing deployment:");
+    console.log("✅ Contracts deployed:");
     console.log(`  ShareVault: ${deployments.shareVault}`);
     console.log(`  VaultCore: ${deployments.vaultCore}`);
     console.log(`  SwapContract: ${deployments.swapContract}`);
-
-    // ═══════════════════════════════════════════════════════════════════
-    // STEP 1: SWITCH TO BALANCED PROFILE
-    // ═══════════════════════════════════════════════════════════════════
-
-    console.log("\n╔══════════════════════════════════════════════════════════════╗");
-    console.log("║   STEP 1: SWITCH TO BALANCED PROFILE                        ║");
-    console.log("╚══════════════════════════════════════════════════════════════╝\n");
-
-    console.log("🔄 Switching investment profile to BALANCED...");
-
-    // Set investment ratios with 90% total investment
-    let tx = await vaultCore.setInvestmentRatios(
-        9000,  // 90% total investment ratio
-        5000,  // 50% to balanced (LST + LP)
-        0      // 0% to aggressive
-    );
-    await tx.wait();
-    console.log("  ✅ Switched to BALANCED profile with 90% total investment");
-
-    const investRatio = await vaultCore.investRatio();
-    console.log("  Total Investment Ratio:", Number(investRatio) / 100 + "%");
-    console.log("  Current Mode: BALANCED (45% to LP pools)");
+    console.log(`  Profile: ${deployments.profile.toUpperCase()} (already configured)`);
 
     // ═══════════════════════════════════════════════════════════════════
     // STEP 2: TEST WITH 3 WALLETS - BALANCED PROFILE
@@ -73,17 +118,42 @@ async function main() {
     const shareVault2 = await ethers.getContractAt("ShareVault", deployments.shareVault, wallet2);
     const shareVault3 = await ethers.getContractAt("ShareVault", deployments.shareVault, wallet3);
 
-    // Wallet 1: Large deposit
-    console.log("1️⃣ Wallet 1 - Deposit with BALANCED (1 KAIA)...");
-    tx = await shareVault1.depositKAIA(wallet1.address, { value: ethers.parseEther("1") });
+    // Wallet 1: Deposit using WKAIA (wrap first, then deposit)
+    console.log("1️⃣ Wallet 1 - Deposit with WKAIA (3 KAIA)...");
+    const wkaiaContract = await ethers.getContractAt("src/interfaces/IWKaia.sol:IWKaia", deployments.wkaia, wallet1);
+    const wkaiaERC20 = await ethers.getContractAt("IERC20", deployments.wkaia, wallet1);
+    
+    // First wrap KAIA to WKAIA
+    console.log("  🔄 Wrapping KAIA to WKAIA...");
+    let tx = await wkaiaContract.deposit({ value: ethers.parseEther("3") });
     await tx.wait();
-    console.log("  ✅ Deposited 1 KAIA");
+    console.log("  ✅ Wrapped 3 KAIA to WKAIA");
+    
+    // Then approve ShareVault to spend WKAIA (using IERC20 interface)
+    console.log("  🔓 Approving ShareVault to spend WKAIA...");
+    tx = await wkaiaERC20.approve(deployments.shareVault, ethers.parseEther("3"));
+    await tx.wait();
+    console.log("  ✅ Approved ShareVault");
+    
+    // Finally deposit WKAIA
+    console.log("  💰 Depositing WKAIA...");
+    tx = await shareVault1.deposit(ethers.parseEther("3"), wallet1.address);
+    await tx.wait();
+    console.log("  ✅ Deposited 3 WKAIA");
+
+    // Wait for next block to avoid per-block deposit limit
+    console.log("  ⏳ Waiting for next block...");
+    await sleep(3000);
 
     // Wallet 2: Medium deposit
     console.log("\n2️⃣ Wallet 2 - Deposit with BALANCED (0.5 KAIA)...");
     tx = await shareVault2.depositKAIA(wallet2.address, { value: ethers.parseEther("0.5") });
     await tx.wait();
     console.log("  ✅ Deposited 0.5 KAIA");
+
+    // Wait for next block to avoid per-block deposit limit
+    console.log("  ⏳ Waiting for next block...");
+    await sleep(3000);
 
     // Wallet 3: Small deposit
     console.log("\n3️⃣ Wallet 3 - Deposit with BALANCED (0.1 KAIA)...");
@@ -208,7 +278,7 @@ async function main() {
     console.log("╚══════════════════════════════════════════════════════════════╝\n");
 
     console.log("✅ Completed Test Steps:");
-    console.log("  1. Switch to BALANCED profile ✓");
+    console.log("  1. Deploy fresh BALANCED contracts ✓");
     console.log("  2. 3-wallet deposit/withdraw test ✓");
     console.log("  3. Add liquidity verification ✓");
     console.log("  4. Remove liquidity fund recovery ✓");

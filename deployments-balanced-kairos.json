@@ -1,0 +1,18 @@
+{
+  "claimManager": "0x7D9297B52a1711B0b0d14b253Af273726F02e423",
+  "swapContract": "0x35145381f13D9Aeb7a67719398fFcECc3c82e90b",
+  "vaultCore": "0xb619153acEE445148d3EA14036ec06fD8d6f1AAE",
+  "shareVault": "0xf00C8F0A2ddB2F2439513c7cD594E9AfC6008e85",
+  "wkaia": "0x0339d5Eb6D195Ba90B13ed1BCeAa97EbD198b106",
+  "balancerVault": "0x1c9074AA147648567015287B0d4185Cb4E04F86d",
+  "chainId": "1001",
+  "network": "kairos",
+  "deployedAt": "2025-08-23T05:57:00.256Z",
+  "profile": "balanced",
+  "configuration": {
+    "investRatio": 9000,
+    "stableRatio": 4500,
+    "balancedRatio": 5000,
+    "aggressiveRatio": 0
+  }
+}

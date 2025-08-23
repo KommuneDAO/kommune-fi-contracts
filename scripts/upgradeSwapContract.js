@@ -9,10 +9,20 @@ async function main() {
     const [deployer] = await ethers.getSigners();
     const chainId = (await ethers.provider.getNetwork()).chainId;
     const networkName = chainId === 8217n ? "kaia" : "kairos";
-    const deploymentFile = `deployments-${networkName}.json`;
+    
+    // Get profile from environment variable or use default
+    const profile = process.env.PROFILE || 'stable';
+    console.log(`📊 Profile: ${profile.toUpperCase()}`);
+    
+    // Load deployment addresses based on profile
+    const deploymentFile = profile === 'stable' || profile === 'balanced' 
+        ? `deployments-${profile}-${networkName}.json`
+        : `deployments-${networkName}.json`;
     
     if (!fs.existsSync(deploymentFile)) {
-        console.error(`❌ ${deploymentFile} not found. Please run deployFresh.js first.`);
+        console.error(`❌ ${deploymentFile} not found.`);
+        console.error(`   Please run deployFresh${profile === 'balanced' ? 'Balanced' : 'Stable'}.js first.`);
+        console.error(`   Or use PROFILE=stable or PROFILE=balanced to select a different profile.`);
         process.exit(1);
     }
     

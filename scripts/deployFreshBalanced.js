@@ -4,7 +4,7 @@ const { contracts } = require("../config/constants");
 const { ChainId } = require("../config/config");
 
 async function main() {
-    console.log("🚀 COMPLETELY FRESH DEPLOYMENT - IGNORING ALL OLD CONTRACTS");
+    console.log("🚀 FRESH BALANCED DEPLOYMENT - IGNORING ALL OLD CONTRACTS");
     console.log("════════════════════════════════════════════════\n");
     
     const [deployer] = await ethers.getSigners();
@@ -154,17 +154,18 @@ async function main() {
     await vaultCore.setAPY(3, 2500); // stKAIA: 25%
     console.log("   ✅ APY set to 25% for all LSTs");
     
-    // 9. Set investment ratios
-    console.log("\n9️⃣ Setting investment ratios...");
+    // 9. Set investment ratios FOR BALANCED PROFILE
+    console.log("\n9️⃣ Setting investment ratios for BALANCED profile...");
     await vaultCore.setInvestmentRatios(
-        investRatio,  // All 90% to stable (LST staking)
-        0,            // 0% to balanced
-        0             // 0% to aggressive
+        9000,  // 90% total investment ratio
+        5000,  // 50% to balanced (45% LST + 45% LP)
+        0      // 0% to aggressive
     );
     console.log("   ✅ Investment ratios configured:");
-    console.log("      - Stable (LST): 90%");
-    console.log("      - Balanced: 0%");
-    console.log("      - Aggressive: 0%");
+    console.log("      - Total Investment: 90%");
+    console.log("      - Balanced (LST+LP): 45% each");
+    console.log("      - Stable (LST only): 45%");
+    console.log("      - Liquidity Buffer: 10%");
     
     // 10. Save deployment addresses
     console.log("\n🔟 Saving deployment addresses...");
@@ -173,15 +174,15 @@ async function main() {
     newDeployments.chainId = chainId.toString();
     newDeployments.network = networkName;
     newDeployments.deployedAt = new Date().toISOString();
-    newDeployments.profile = "stable";
+    newDeployments.profile = "balanced";
     newDeployments.configuration = {
-        investRatio: investRatio,
-        stableRatio: investRatio,
-        balancedRatio: 0,
+        investRatio: 9000,
+        stableRatio: 4500,  // Effective 45% to LST
+        balancedRatio: 5000, // 50% of 90% = 45%
         aggressiveRatio: 0
     };
     
-    const filename = `deployments-${networkName}.json`;
+    const filename = `deployments-balanced-${networkName}.json`;
     fs.writeFileSync(filename, JSON.stringify(newDeployments, null, 2));
     console.log(`   ✅ Deployment addresses saved to ${filename}`);
     
@@ -222,7 +223,7 @@ async function main() {
     console.log(`      Aggressive: ${Number(aggressiveRatioCheck) / 100}%`);
     
     console.log("\n════════════════════════════════════════════════");
-    console.log("🎉 COMPLETELY FRESH DEPLOYMENT COMPLETE!");
+    console.log("🎉 FRESH BALANCED DEPLOYMENT COMPLETE!");
     console.log("════════════════════════════════════════════════");
     console.log("\n📝 New Deployment Summary:");
     console.log("  ShareVault:", newDeployments.shareVault);
@@ -230,13 +231,13 @@ async function main() {
     console.log("  SwapContract:", newDeployments.swapContract);
     console.log("  ClaimManager:", newDeployments.claimManager);
     console.log("  WKAIA:", newDeployments.wkaia);
-    console.log("\n📊 Investment Profile: STABLE");
+    console.log("\n📊 Investment Profile: BALANCED");
     console.log("  Total Investment: 90%");
-    console.log("  Stable Strategy: 90% (LST staking)");
+    console.log("  Balanced Strategy: 45% LST + 45% LP");
     console.log("  Liquidity Buffer: 10%");
     console.log("\n💡 Next Steps:");
-    console.log("  1. Run integration tests: npx hardhat run scripts/testIntegrated.js --network", networkName);
-    console.log("  2. Change profile if needed using setInvestmentRatios()");
+    console.log("  1. Run balanced integration tests: npx hardhat run scripts/tests/testIntegratedBalanced.js --network", networkName);
+    console.log("  2. Monitor LP positions and yields");
     console.log("  3. Adjust APY distribution if needed");
 }
 

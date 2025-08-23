@@ -211,11 +211,17 @@ await shareVault.withdraw(withdrawWKAIA, user, user);
 
 ### Deployment Addresses (Kairos Testnet)
 
-#### Current V2 Deployment (2025-08-18)
-- ShareVault: `0x86a4bDf145004DF36F0121140a034879cFAE8B2c`
-- VaultCore: `0xe89197c395De50eC62CfE1dE841ea088c1bD810b`
-- SwapContract: `0x05fC200A7eaCDeECe7BBcBf6d672E12a65F800DC`
-- ClaimManager: `0x0E4A014564caA6610260054A73f11DF1167aC265`
+#### Current V2 Deployment - STABLE Profile (2025-08-23)
+- ShareVault: `0x6aE22E565843757964d678d91075B46084e324e0`
+- VaultCore: `0x3Cc0F6712A5C90baE128599FBdd963023518D6FB`
+- SwapContract: `0x2bD837F62a86b0d086a0cb25163C10168Aa51E40`
+- ClaimManager: `0xDa32A18105eb15109f33e2AF50376BAAE2C7230e`
+
+#### Current V2 Deployment - BALANCED Profile (2025-08-23)
+- ShareVault: `0xf00C8F0A2ddB2F2439513c7cD594E9AfC6008e85`
+- VaultCore: `0xb619153acEE445148d3EA14036ec06fD8d6f1AAE`
+- SwapContract: `0x35145381f13D9Aeb7a67719398fFcECc3c82e90b`
+- ClaimManager: `0x7D9297B52a1711B0b0d14b253Af273726F02e423`
 
 #### Network Constants
 - WKAIA: `0x0339d5Eb6D195Ba90B13ed1BCeAa97EbD198b106`
@@ -223,20 +229,18 @@ await shareVault.withdraw(withdrawWKAIA, user, user);
 
 ### Scripts Organization
 - `scripts/` - Essential deployment and configuration scripts
-  - `deployV1.js` - V1 deployment (DO NOT MODIFY)
-  - `upgradeV1.js` - V1 upgrade (DO NOT MODIFY)
-  - `deployFresh.js` - Fresh deployment with profile selection
-  - `deployWithProfile.js` - Deploy with specific investment profile
-  - `upgradeAll.js` - Upgrade all contracts
-  - `upgradeVaultCore.js` - Upgrade VaultCore contract
-  - `upgradeShareVault.js` - Upgrade ShareVault contract
-  - `upgradeSwapContract.js` - Upgrade SwapContract
+  - `deployFreshStable.js` - Deploy fresh V2 with STABLE profile (90% LST)
+  - `deployFreshBalanced.js` - Deploy fresh V2 with BALANCED profile (45% LST + 45% LP)
+  - `upgradeAll.js` - Upgrade all V2 contracts (supports PROFILE env var)
+  - `upgradeShareVault.js` - Upgrade ShareVault only (supports PROFILE env var)
+  - `upgradeVaultCore.js` - Upgrade VaultCore only (supports PROFILE env var)
+  - `upgradeSwapContract.js` - Upgrade SwapContract only (supports PROFILE env var)
   - `setAPY.js` - Set APY values
-  - `testUpgrades.js` - Test contract upgrades
 - `scripts/tests/` - Test scripts
-  - `testIntegratedStable.js` - STABLE mode integrated test (LST staking only)
-  - `testIntegratedBalanced.js` - BALANCED mode integrated test (LST + LP pools)
-  - `testUnstakeClaim.js` - Owner unstake/claim operations test
+  - `testIntegratedStable.js` - STABLE mode integrated test with 3 KAIA WKAIA deposit
+  - `testIntegratedBalanced.js` - BALANCED mode integrated test with 3 KAIA WKAIA deposit
+  - `testUnstakeClaim.js` - Owner unstake/claim operations test (10-minute wait)
+- `scripts/temp/` - Temporary test scripts (create new tests here first)
 
 ### LST Token Information
 1. **wKoKAIA** (Index 0)
@@ -741,4 +745,8 @@ userData: abi.encode(1, amountsForUserData, 0)  // JOIN_KIND_EXACT_TOKENS_IN_FOR
 - **BALANCED investment type implemented with Balancer pool integration (2025-08-20)**
 - **JoinPool userData encoding fixed - exclude BPT from userData array (2025-08-20)**
 - **ExitPool implementation completed with EXACT_BPT_IN_FOR_ONE_TOKEN_OUT (2025-08-20)**
-- **Integrated tests separated by mode - testIntegratedStable.js and testIntegratedBalanced.js (2025-08-23)**
+- **LP token valuation correctly included in totalAssets calculation (2025-08-21)**
+- **Profile-based deployment separation: deployFreshStable.js and deployFreshBalanced.js (2025-08-23)**
+- **Unified upgrade scripts with PROFILE environment variable support (2025-08-23)**
+- **Integration tests separated by mode - testIntegratedStable.js and testIntegratedBalanced.js (2025-08-23)**
+- **All tests updated with 3 KAIA WKAIA deposits for sufficient liquidity buffer (2025-08-23)**

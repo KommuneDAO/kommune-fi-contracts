@@ -15,6 +15,10 @@ require("dotenv").config();
  * Usage:
  * npx hardhat run scripts/upgradeAll.js --network kairos
  * npx hardhat run scripts/upgradeAll.js --network kaia
+ * 
+ * With profile selection:
+ * PROFILE=stable npx hardhat run scripts/upgradeAll.js --network kairos
+ * PROFILE=balanced npx hardhat run scripts/upgradeAll.js --network kairos
  */
 
 async function main() {
@@ -31,13 +35,21 @@ async function main() {
     // Get network info
     const chainId = (await ethers.provider.getNetwork()).chainId;
     const networkName = chainId === 8217n ? "kaia" : "kairos";
-    console.log(`🌐 Network: ${networkName.toUpperCase()} (Chain ID: ${chainId})\n`);
+    console.log(`🌐 Network: ${networkName.toUpperCase()} (Chain ID: ${chainId})`);
     
-    // Load deployment addresses
-    const filename = `deployments-${networkName}.json`;
+    // Get profile from environment variable or use default
+    const profile = process.env.PROFILE || 'stable';
+    console.log(`📊 Profile: ${profile.toUpperCase()}\n`);
+    
+    // Load deployment addresses based on profile
+    const filename = profile === 'stable' || profile === 'balanced' 
+        ? `deployments-${profile}-${networkName}.json`
+        : `deployments-${networkName}.json`;
+    
     if (!fs.existsSync(filename)) {
         console.error(`❌ Deployment file ${filename} not found!`);
-        console.error("   Please run deployFresh.js first.");
+        console.error(`   Please run deployFresh${profile === 'balanced' ? 'Balanced' : 'Stable'}.js first.`);
+        console.error(`   Or use PROFILE=stable or PROFILE=balanced to select a different profile.`);
         process.exit(1);
     }
     
