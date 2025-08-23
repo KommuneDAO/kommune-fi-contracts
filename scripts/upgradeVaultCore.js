@@ -25,9 +25,20 @@ async function main() {
     
     console.log("\n📦 VaultCore 업그레이드 중...");
     
+    // Deploy new LPCalculations library first
+    const LPCalculations = await ethers.getContractFactory("LPCalculations");
+    const lpCalculations = await LPCalculations.deploy();
+    await lpCalculations.waitForDeployment();
+    const lpCalculationsAddress = await lpCalculations.getAddress();
+    console.log("  📚 LPCalculations library deployed at:", lpCalculationsAddress);
+    
     // Force import the proxy if not registered
     try {
-        const VaultCore = await ethers.getContractFactory("VaultCore");
+        const VaultCore = await ethers.getContractFactory("VaultCore", {
+            libraries: {
+                LPCalculations: lpCalculationsAddress
+            }
+        });
         try {
             await upgrades.forceImport(deployments.vaultCore, VaultCore);
             console.log("  ✓ 프록시 임포트 완료");
@@ -35,11 +46,14 @@ async function main() {
             console.log("  ✓ 프록시 이미 등록됨");
         }
         
-        // Upgrade VaultCore with unsafeAllow for delegatecall
+        // Upgrade VaultCore with unsafeAllow for delegatecall and library linking
         const vaultCore = await upgrades.upgradeProxy(
             deployments.vaultCore, 
             VaultCore,
-            { unsafeAllow: ['delegatecall'] }  // Allow delegatecall for ClaimManager
+            { 
+                unsafeAllow: ['delegatecall', 'external-library-linking'],
+                redeployImplementation: 'always'
+            }
         );
         await vaultCore.waitForDeployment();
         console.log("  ✅ VaultCore 업그레이드 성공");
