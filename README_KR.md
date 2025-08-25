@@ -26,6 +26,7 @@ scripts/
 ├── deployFresh.js         # 신규 배포 스크립트
 ├── upgradeAll.js          # 모든 컨트랙트 업그레이드
 ├── setAPY.js              # APY 설정
+├── recoverSwapAssets.js   # SwapContract 잔류 자산 회수
 └── tests/                 # 통합 테스트
 
 docs/
@@ -173,9 +174,32 @@ npx hardhat run scripts/testUpgrades.js --network kairos
 - 복잡한 계산을 위한 외부 라이브러리
 - 깔끔한 관심사 분리
 
+## 유지보수 및 운영
+
+### SwapContract 자산 회수
+SwapContract에는 스왑 실패나 부분 실행으로 인해 가끔 자산이 남을 수 있습니다. 주기적으로 회수 스크립트를 실행하세요:
+
+```bash
+# 잔류 자산 확인 및 회수 (테스트넷)
+npx hardhat run scripts/recoverSwapAssets.js --network kairos
+
+# 메인넷
+npx hardhat run scripts/recoverSwapAssets.js --network kaia
+```
+
+**권장 주기**: 매주 또는 스왑 실패 보고 시
+
+스크립트 동작:
+1. SwapContract의 모든 토큰 잔액 확인
+2. 발견된 잔류 자산 보고
+3. VaultCore로 회수 (owner 전용 작업)
+4. 성공적인 회수 검증
+
 ## 중요 사항
 
 ⚠️ **SwapContract는 최종 완성됨**: SwapContract는 4개 LST 모두에 대해 철저히 테스트되었으며 수정해서는 안 됩니다.
+
+⚠️ **자산 회수**: SwapContract에 잔류 토큰 회수를 위한 `returnAssetsToVault()` 함수가 추가되었습니다 (업그레이드 필요).
 
 ⚠️ **V2 아키텍처 사용**: 분리된 볼트 아키텍처(ShareVault + VaultCore)가 권장 배포입니다.
 
