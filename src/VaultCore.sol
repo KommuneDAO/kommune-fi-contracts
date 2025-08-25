@@ -65,6 +65,10 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
         investRatio = _investRatio;
         slippage = 1000; // 10% default slippage
         
+        // Set mainnet flag based on chain ID
+        uint256 chainId = block.chainid;
+        isMainnet = (chainId == 8217); // Kaia mainnet
+        
         // Set default ratios - no LP creation initially
         // Can be changed later via setInvestmentRatios
         balancedRatio = 0;    // 0% of LSTs go to pool1
@@ -497,24 +501,31 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
      * @param ratio Percentage of LSTs to add (in basis points, e.g., 5000 = 50%)
      */
     function _addLSTsToPool1(uint256 ratio) private {
-        // Based on tx analysis, the pool expects these tokens in sorted order:
-        // [0]: 0x324353670B23b16DFacBDE169Cd8ebF8C8bf6601 (wGCKAIA)
-        // [1]: 0x45886b01276c45Fe337d3758b94DD8D7F3951d97 (stKAIA)
-        // [2]: 0x474B49DF463E528223F244670e332fE82742e1aA (wstKLAY)
-        // [3]: 0x9a93e2fcDEBE43d0f8205D1cd255D709B7598317 (wKoKAIA)
-        // [4]: 0xCC163330E85C34788840773E32917E2F51878B95 (BPT/tokenB - amount is 0)
+        // Mainnet has 6 tokens (includes SKLAY), testnet has 5 tokens
+        uint256 numTokens = isMainnet ? 6 : 5;
         
         // Prepare arrays for joinPool
-        IAsset[] memory assets = new IAsset[](5);
-        uint256[] memory maxAmountsIn = new uint256[](5);
+        IAsset[] memory assets = new IAsset[](numTokens);
+        uint256[] memory maxAmountsIn = new uint256[](numTokens);
         bool hasLiquidity = false;
         
-        // Set assets in the exact order from the transaction
-        assets[0] = IAsset(tokensInfo[1].tokenA); // wGCKAIA (LST index 1)
-        assets[1] = IAsset(tokensInfo[3].tokenA); // stKAIA  (LST index 3)
-        assets[2] = IAsset(tokensInfo[2].tokenA); // wstKLAY (LST index 2)
-        assets[3] = IAsset(tokensInfo[0].tokenA); // wKoKAIA (LST index 0)
-        assets[4] = IAsset(tokensInfo[0].tokenB); // BPT/tokenB
+        // Set assets based on network
+        if (isMainnet) {
+            // Mainnet order: wstKLAY, stKAIA, BPT, SKLAY, wGCKAIA, wKoKAIA
+            assets[0] = IAsset(tokensInfo[2].tokenA); // wstKLAY (LST index 2)
+            assets[1] = IAsset(tokensInfo[3].tokenA); // stKAIA  (LST index 3)
+            assets[2] = IAsset(tokensInfo[0].tokenB); // BPT/tokenB
+            assets[3] = IAsset(0xA323d7386b671E8799dcA3582D6658FdcDcD940A); // SKLAY (mainnet)
+            assets[4] = IAsset(tokensInfo[1].tokenA); // wGCKAIA (LST index 1)
+            assets[5] = IAsset(tokensInfo[0].tokenA); // wKoKAIA (LST index 0)
+        } else {
+            // Testnet order: wGCKAIA, stKAIA, wstKLAY, wKoKAIA, BPT
+            assets[0] = IAsset(tokensInfo[1].tokenA); // wGCKAIA (LST index 1)
+            assets[1] = IAsset(tokensInfo[3].tokenA); // stKAIA  (LST index 3)
+            assets[2] = IAsset(tokensInfo[2].tokenA); // wstKLAY (LST index 2)
+            assets[3] = IAsset(tokensInfo[0].tokenA); // wKoKAIA (LST index 0)
+            assets[4] = IAsset(tokensInfo[0].tokenB); // BPT/tokenB
+        }
         
         // Calculate and set amounts for each LST
         uint256[4] memory lstBalances;
@@ -522,40 +533,79 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
             lstBalances[i] = IERC20(tokensInfo[i].tokenA).balanceOf(address(this));
         }
         
-        // Set maxAmountsIn in the correct order
-        if (lstBalances[1] > 0 && lstAPY[1] > 0) { // wGCKAIA
-            maxAmountsIn[0] = (lstBalances[1] * ratio) / 10000;
-            if (maxAmountsIn[0] > 0) {
-                hasLiquidity = true;
-                IERC20(tokensInfo[1].tokenA).approve(balancerVault, maxAmountsIn[0]);
+        // Set maxAmountsIn based on network order
+        if (isMainnet) {
+            // Mainnet order
+            if (lstBalances[2] > 0 && lstAPY[2] > 0) { // wstKLAY at index 0
+                maxAmountsIn[0] = (lstBalances[2] * ratio) / 10000;
+                if (maxAmountsIn[0] > 0) {
+                    hasLiquidity = true;
+                    IERC20(tokensInfo[2].tokenA).approve(balancerVault, maxAmountsIn[0]);
+                }
             }
-        }
-        
-        if (lstBalances[3] > 0 && lstAPY[3] > 0) { // stKAIA
-            maxAmountsIn[1] = (lstBalances[3] * ratio) / 10000;
-            if (maxAmountsIn[1] > 0) {
-                hasLiquidity = true;
-                IERC20(tokensInfo[3].tokenA).approve(balancerVault, maxAmountsIn[1]);
+            
+            if (lstBalances[3] > 0 && lstAPY[3] > 0) { // stKAIA at index 1
+                maxAmountsIn[1] = (lstBalances[3] * ratio) / 10000;
+                if (maxAmountsIn[1] > 0) {
+                    hasLiquidity = true;
+                    IERC20(tokensInfo[3].tokenA).approve(balancerVault, maxAmountsIn[1]);
+                }
             }
-        }
-        
-        if (lstBalances[2] > 0 && lstAPY[2] > 0) { // wstKLAY
-            maxAmountsIn[2] = (lstBalances[2] * ratio) / 10000;
-            if (maxAmountsIn[2] > 0) {
-                hasLiquidity = true;
-                IERC20(tokensInfo[2].tokenA).approve(balancerVault, maxAmountsIn[2]);
+            
+            maxAmountsIn[2] = 0; // BPT - always 0
+            maxAmountsIn[3] = 0; // SKLAY - always 0 (not supported)
+            
+            if (lstBalances[1] > 0 && lstAPY[1] > 0) { // wGCKAIA at index 4
+                maxAmountsIn[4] = (lstBalances[1] * ratio) / 10000;
+                if (maxAmountsIn[4] > 0) {
+                    hasLiquidity = true;
+                    IERC20(tokensInfo[1].tokenA).approve(balancerVault, maxAmountsIn[4]);
+                }
             }
-        }
-        
-        if (lstBalances[0] > 0 && lstAPY[0] > 0) { // wKoKAIA
-            maxAmountsIn[3] = (lstBalances[0] * ratio) / 10000;
-            if (maxAmountsIn[3] > 0) {
-                hasLiquidity = true;
-                IERC20(tokensInfo[0].tokenA).approve(balancerVault, maxAmountsIn[3]);
+            
+            if (lstBalances[0] > 0 && lstAPY[0] > 0) { // wKoKAIA at index 5
+                maxAmountsIn[5] = (lstBalances[0] * ratio) / 10000;
+                if (maxAmountsIn[5] > 0) {
+                    hasLiquidity = true;
+                    IERC20(tokensInfo[0].tokenA).approve(balancerVault, maxAmountsIn[5]);
+                }
             }
+        } else {
+            // Testnet order
+            if (lstBalances[1] > 0 && lstAPY[1] > 0) { // wGCKAIA at index 0
+                maxAmountsIn[0] = (lstBalances[1] * ratio) / 10000;
+                if (maxAmountsIn[0] > 0) {
+                    hasLiquidity = true;
+                    IERC20(tokensInfo[1].tokenA).approve(balancerVault, maxAmountsIn[0]);
+                }
+            }
+            
+            if (lstBalances[3] > 0 && lstAPY[3] > 0) { // stKAIA at index 1
+                maxAmountsIn[1] = (lstBalances[3] * ratio) / 10000;
+                if (maxAmountsIn[1] > 0) {
+                    hasLiquidity = true;
+                    IERC20(tokensInfo[3].tokenA).approve(balancerVault, maxAmountsIn[1]);
+                }
+            }
+            
+            if (lstBalances[2] > 0 && lstAPY[2] > 0) { // wstKLAY at index 2
+                maxAmountsIn[2] = (lstBalances[2] * ratio) / 10000;
+                if (maxAmountsIn[2] > 0) {
+                    hasLiquidity = true;
+                    IERC20(tokensInfo[2].tokenA).approve(balancerVault, maxAmountsIn[2]);
+                }
+            }
+            
+            if (lstBalances[0] > 0 && lstAPY[0] > 0) { // wKoKAIA at index 3
+                maxAmountsIn[3] = (lstBalances[0] * ratio) / 10000;
+                if (maxAmountsIn[3] > 0) {
+                    hasLiquidity = true;
+                    IERC20(tokensInfo[0].tokenA).approve(balancerVault, maxAmountsIn[3]);
+                }
+            }
+            
+            maxAmountsIn[4] = 0; // BPT - always 0
         }
-        
-        maxAmountsIn[4] = 0; // BPT - always 0
         
         // Only proceed if we have liquidity to add
         if (hasLiquidity) {
@@ -563,12 +613,25 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
             bytes32 poolId = tokensInfo[0].pool1;
             
             // Prepare JoinPoolRequest
-            // userData needs only the first 4 amounts (LSTs), not the BPT
-            uint256[] memory amountsForUserData = new uint256[](4);
-            amountsForUserData[0] = maxAmountsIn[0]; // wGCKAIA
-            amountsForUserData[1] = maxAmountsIn[1]; // stKAIA
-            amountsForUserData[2] = maxAmountsIn[2]; // wstKLAY
-            amountsForUserData[3] = maxAmountsIn[3]; // wKoKAIA
+            // userData needs amounts excluding BPT
+            uint256[] memory amountsForUserData;
+            
+            if (isMainnet) {
+                // Mainnet: 5 amounts (exclude BPT at index 2)
+                amountsForUserData = new uint256[](5);
+                amountsForUserData[0] = maxAmountsIn[0]; // wstKLAY
+                amountsForUserData[1] = maxAmountsIn[1]; // stKAIA
+                amountsForUserData[2] = maxAmountsIn[3]; // SKLAY (0)
+                amountsForUserData[3] = maxAmountsIn[4]; // wGCKAIA
+                amountsForUserData[4] = maxAmountsIn[5]; // wKoKAIA
+            } else {
+                // Testnet: 4 amounts (exclude BPT at index 4)
+                amountsForUserData = new uint256[](4);
+                amountsForUserData[0] = maxAmountsIn[0]; // wGCKAIA
+                amountsForUserData[1] = maxAmountsIn[1]; // stKAIA
+                amountsForUserData[2] = maxAmountsIn[2]; // wstKLAY
+                amountsForUserData[3] = maxAmountsIn[3]; // wKoKAIA
+            }
             
             IBalancerVaultExtended.JoinPoolRequest memory request = IBalancerVaultExtended.JoinPoolRequest({
                 assets: assets,
@@ -820,26 +883,49 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
         // All BPT is stored at index 0 since all LSTs share the same pool
         if (lpBalance < lpAmount) revert("E22");
         
-        // Use same assets array as joinPool (5 tokens)
-        IAsset[] memory assets = new IAsset[](5);
-        assets[0] = IAsset(tokensInfo[1].tokenA); // wGCKAIA
-        assets[1] = IAsset(tokensInfo[3].tokenA); // stKAIA
-        assets[2] = IAsset(tokensInfo[2].tokenA); // wstKLAY
-        assets[3] = IAsset(tokensInfo[0].tokenA); // wKoKAIA
-        assets[4] = IAsset(tokensInfo[0].tokenB); // BPT
+        // Use same assets array as joinPool
+        uint256 numTokens = isMainnet ? 6 : 5;
+        IAsset[] memory assets = new IAsset[](numTokens);
+        
+        // Set assets based on network
+        if (isMainnet) {
+            // Mainnet order: wstKLAY, stKAIA, BPT, SKLAY, wGCKAIA, wKoKAIA
+            assets[0] = IAsset(tokensInfo[2].tokenA); // wstKLAY
+            assets[1] = IAsset(tokensInfo[3].tokenA); // stKAIA
+            assets[2] = IAsset(tokensInfo[0].tokenB); // BPT
+            assets[3] = IAsset(0xA323d7386b671E8799dcA3582D6658FdcDcD940A); // SKLAY (mainnet)
+            assets[4] = IAsset(tokensInfo[1].tokenA); // wGCKAIA
+            assets[5] = IAsset(tokensInfo[0].tokenA); // wKoKAIA
+        } else {
+            // Testnet order: wGCKAIA, stKAIA, wstKLAY, wKoKAIA, BPT
+            assets[0] = IAsset(tokensInfo[1].tokenA); // wGCKAIA
+            assets[1] = IAsset(tokensInfo[3].tokenA); // stKAIA
+            assets[2] = IAsset(tokensInfo[2].tokenA); // wstKLAY
+            assets[3] = IAsset(tokensInfo[0].tokenA); // wKoKAIA
+            assets[4] = IAsset(tokensInfo[0].tokenB); // BPT
+        }
         
         // Minimum amounts out (0 = accept any amount)
-        uint256[] memory minAmountsOut = new uint256[](5);
+        uint256[] memory minAmountsOut = new uint256[](numTokens);
         // All zeros - accept any amount
         
         // Encode userData for EXACT_BPT_IN_FOR_ONE_TOKEN_OUT
         // ExitKind = 0, bptAmountIn, exitTokenIndex
         // We exit to the token that matches lstIndex
         uint256 exitTokenIndex;
-        if (lstIndex == 0) exitTokenIndex = 3;      // wKoKAIA is at index 3
-        else if (lstIndex == 1) exitTokenIndex = 0;  // wGCKAIA is at index 0
-        else if (lstIndex == 2) exitTokenIndex = 2;  // wstKLAY is at index 2
-        else exitTokenIndex = 1;                     // stKAIA is at index 1
+        if (isMainnet) {
+            // Mainnet token indices
+            if (lstIndex == 0) exitTokenIndex = 5;      // wKoKAIA at index 5
+            else if (lstIndex == 1) exitTokenIndex = 4; // wGCKAIA at index 4
+            else if (lstIndex == 2) exitTokenIndex = 0; // wstKLAY at index 0
+            else exitTokenIndex = 1;                    // stKAIA at index 1
+        } else {
+            // Testnet token indices
+            if (lstIndex == 0) exitTokenIndex = 3;      // wKoKAIA at index 3
+            else if (lstIndex == 1) exitTokenIndex = 0; // wGCKAIA at index 0
+            else if (lstIndex == 2) exitTokenIndex = 2; // wstKLAY at index 2
+            else exitTokenIndex = 1;                    // stKAIA at index 1
+        }
         
         bytes memory userData = abi.encode(0, lpAmount, exitTokenIndex);
         

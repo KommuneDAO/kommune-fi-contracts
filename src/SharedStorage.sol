@@ -50,12 +50,15 @@ contract SharedStorage {
     uint256 public lpBalance;           // slot 15 - Total BPT balance (all LSTs share same pool)
     address public lpToken;             // slot 16 - BPT token address
     
+    // ========== NETWORK CONFIGURATION (slot 17) ==========
+    bool public isMainnet;              // slot 17 - true for mainnet (6-token pool), false for testnet (5-token pool)
+    
     // ========== RESERVE FOR FUTURE UPGRADES ==========
     // When adding new variables:
     // 1. Add them here (before __gap)
     // 2. Decrease __gap size accordingly
-    // Example: uint256 public newVariable; // slot 17
-    //          uint256[33] private __gap;  // reduced from 34
+    // Example: uint256 public newVariable; // slot 18
+    //          uint256[32] private __gap;  // reduced from 33
     
-    uint256[34] private __gap;  // Reserve slots 17-50 for future variables
+    uint256[33] private __gap;  // Reserve slots 18-50 for future variables
 }
