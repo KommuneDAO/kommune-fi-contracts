@@ -45,10 +45,17 @@ contract ShareVault is ERC4626Upgradeable, OwnableUpgradeable, ReentrancyGuardUp
     mapping(address => uint256) public lastDepositBlock;
     uint256 public depositLimit;
     
+    // Providers management
+    address[] public providers;
+    mapping(address => bool) public isProvider;
+    
     // Events
     event VaultCoreUpdated(address indexed oldCore, address indexed newCore);
     event FeesUpdated(uint256 basisPoints);
     event TreasuryUpdated(address indexed treasury);
+    event ProviderAdded(address indexed provider);
+    event ProviderRemoved(address indexed provider);
+    event WithdrawWithProvider(address indexed caller, address indexed receiver, address indexed owner, uint256 assets, uint256 shares, address provider, uint256 providerFee);
     
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -137,12 +144,28 @@ contract ShareVault is ERC4626Upgradeable, OwnableUpgradeable, ReentrancyGuardUp
     }
     
     /**
-     * @dev Withdraw assets by burning shares
+     * @dev Withdraw assets by burning shares (standard ERC4626, no provider)
      */
     function withdraw(uint256 assets, address receiver, address owner)
         public
         virtual
         override
+        nonReentrant
+        returns (uint256 shares)
+    {
+        // Call withdrawWithProvider with address(0) for backward compatibility
+        return withdrawWithProvider(assets, receiver, owner, address(0));
+    }
+    
+    /**
+     * @dev Withdraw assets with provider fee sharing
+     * @param assets Amount of assets to withdraw
+     * @param receiver Address to receive the assets
+     * @param owner Address of the share owner
+     * @param provider Provider address for fee sharing (1/3 of fee goes to provider if valid)
+     */
+    function withdrawWithProvider(uint256 assets, address receiver, address owner, address provider)
+        public
         nonReentrant
         returns (uint256 shares)
     {
@@ -156,15 +179,51 @@ contract ShareVault is ERC4626Upgradeable, OwnableUpgradeable, ReentrancyGuardUp
             _spendAllowance(owner, msg.sender, shares);
         }
         
-        // Request assets from VaultCore
+        // Calculate fee and net amount
+        uint256 feeAmount = 0;
+        uint256 netAssets = assets;
+        uint256 providerFee = 0;
+        uint256 treasuryFee = 0;
+        
+        if (basisPointsFees > 0 && treasury != address(0)) {
+            feeAmount = (assets * basisPointsFees) / 10000;
+            netAssets = assets - feeAmount;
+            
+            // Split fee if provider is valid
+            if (provider != address(0) && isProvider[provider]) {
+                providerFee = feeAmount / 3;  // 1/3 to provider
+                treasuryFee = feeAmount - providerFee;  // 2/3 to treasury
+            } else {
+                treasuryFee = feeAmount;  // All to treasury
+            }
+        }
+        
+        // Request total assets (including fee) from VaultCore
         if (vaultCore != address(0)) {
             (bool success,) = vaultCore.call(
-                abi.encodeWithSignature("handleWithdraw(uint256,address)", assets, receiver)
+                abi.encodeWithSignature("handleWithdraw(uint256,address)", assets, address(this))
             );
             require(success, "Core withdraw failed");
+            
+            // Transfer fees
+            if (providerFee > 0) {
+                IERC20(asset()).safeTransfer(provider, providerFee);
+            }
+            if (treasuryFee > 0) {
+                IERC20(asset()).safeTransfer(treasury, treasuryFee);
+            }
+            
+            // Transfer net amount to receiver
+            IERC20(asset()).safeTransfer(receiver, netAssets);
         } else {
             // Fallback: transfer from this contract
-            IERC20(asset()).safeTransfer(receiver, assets);
+            if (providerFee > 0) {
+                IERC20(asset()).safeTransfer(provider, providerFee);
+            }
+            if (treasuryFee > 0) {
+                IERC20(asset()).safeTransfer(treasury, treasuryFee);
+            }
+            IERC20(asset()).safeTransfer(receiver, netAssets);
         }
         
         // Burn shares
@@ -177,7 +236,13 @@ contract ShareVault is ERC4626Upgradeable, OwnableUpgradeable, ReentrancyGuardUp
             deposits[owner].amount = 0;
         }
         
-        emit Withdraw(msg.sender, receiver, owner, assets, shares);
+        // Emit appropriate event
+        if (provider != address(0) && isProvider[provider]) {
+            emit WithdrawWithProvider(msg.sender, receiver, owner, assets, shares, provider, providerFee);
+        } else {
+            emit Withdraw(msg.sender, receiver, owner, assets, shares);
+        }
+        
         return shares;
     }
     
@@ -224,12 +289,28 @@ contract ShareVault is ERC4626Upgradeable, OwnableUpgradeable, ReentrancyGuardUp
     }
     
     /**
-     * @dev Redeem shares for assets
+     * @dev Redeem shares for assets (standard ERC4626, no provider)
      */
     function redeem(uint256 shares, address receiver, address owner)
         public
         virtual
         override
+        nonReentrant
+        returns (uint256 assets)
+    {
+        // Call redeemWithProvider with address(0) for backward compatibility
+        return redeemWithProvider(shares, receiver, owner, address(0));
+    }
+    
+    /**
+     * @dev Redeem shares with provider fee sharing
+     * @param shares Amount of shares to redeem
+     * @param receiver Address to receive the assets
+     * @param owner Address of the share owner
+     * @param provider Provider address for fee sharing (1/3 of fee goes to provider if valid)
+     */
+    function redeemWithProvider(uint256 shares, address receiver, address owner, address provider)
+        public
         nonReentrant
         returns (uint256 assets)
     {
@@ -243,15 +324,51 @@ contract ShareVault is ERC4626Upgradeable, OwnableUpgradeable, ReentrancyGuardUp
             _spendAllowance(owner, msg.sender, shares);
         }
         
-        // Request assets from VaultCore
+        // Calculate fee and net amount
+        uint256 feeAmount = 0;
+        uint256 netAssets = assets;
+        uint256 providerFee = 0;
+        uint256 treasuryFee = 0;
+        
+        if (basisPointsFees > 0 && treasury != address(0)) {
+            feeAmount = (assets * basisPointsFees) / 10000;
+            netAssets = assets - feeAmount;
+            
+            // Split fee if provider is valid
+            if (provider != address(0) && isProvider[provider]) {
+                providerFee = feeAmount / 3;  // 1/3 to provider
+                treasuryFee = feeAmount - providerFee;  // 2/3 to treasury
+            } else {
+                treasuryFee = feeAmount;  // All to treasury
+            }
+        }
+        
+        // Request total assets (including fee) from VaultCore
         if (vaultCore != address(0)) {
             (bool success,) = vaultCore.call(
-                abi.encodeWithSignature("handleWithdraw(uint256,address)", assets, receiver)
+                abi.encodeWithSignature("handleWithdraw(uint256,address)", assets, address(this))
             );
             require(success, "Core withdraw failed");
+            
+            // Transfer fees
+            if (providerFee > 0) {
+                IERC20(asset()).safeTransfer(provider, providerFee);
+            }
+            if (treasuryFee > 0) {
+                IERC20(asset()).safeTransfer(treasury, treasuryFee);
+            }
+            
+            // Transfer net amount to receiver
+            IERC20(asset()).safeTransfer(receiver, netAssets);
         } else {
             // Fallback: transfer from this contract
-            IERC20(asset()).safeTransfer(receiver, assets);
+            if (providerFee > 0) {
+                IERC20(asset()).safeTransfer(provider, providerFee);
+            }
+            if (treasuryFee > 0) {
+                IERC20(asset()).safeTransfer(treasury, treasuryFee);
+            }
+            IERC20(asset()).safeTransfer(receiver, netAssets);
         }
         
         // Burn shares
@@ -264,7 +381,13 @@ contract ShareVault is ERC4626Upgradeable, OwnableUpgradeable, ReentrancyGuardUp
             deposits[owner].amount = 0;
         }
         
-        emit Withdraw(msg.sender, receiver, owner, assets, shares);
+        // Emit appropriate event
+        if (provider != address(0) && isProvider[provider]) {
+            emit WithdrawWithProvider(msg.sender, receiver, owner, assets, shares, provider, providerFee);
+        } else {
+            emit Withdraw(msg.sender, receiver, owner, assets, shares);
+        }
+        
         return assets;
     }
     
@@ -330,6 +453,59 @@ contract ShareVault is ERC4626Upgradeable, OwnableUpgradeable, ReentrancyGuardUp
     
     function setDepositLimit(uint256 _limit) external onlyOwner {
         depositLimit = _limit;
+    }
+    
+    // Provider management functions
+    
+    /**
+     * @dev Add a new provider address
+     * @param provider Address to add as provider
+     */
+    function addProvider(address provider) external onlyOwner {
+        require(provider != address(0), "Invalid address");
+        require(!isProvider[provider], "Already provider");
+        
+        providers.push(provider);
+        isProvider[provider] = true;
+        
+        emit ProviderAdded(provider);
+    }
+    
+    /**
+     * @dev Remove a provider address
+     * @param provider Address to remove from providers
+     */
+    function removeProvider(address provider) external onlyOwner {
+        require(isProvider[provider], "Not a provider");
+        
+        isProvider[provider] = false;
+        
+        // Remove from array
+        for (uint256 i = 0; i < providers.length; i++) {
+            if (providers[i] == provider) {
+                providers[i] = providers[providers.length - 1];
+                providers.pop();
+                break;
+            }
+        }
+        
+        emit ProviderRemoved(provider);
+    }
+    
+    /**
+     * @dev Get all provider addresses
+     * @return Array of provider addresses
+     */
+    function getProviders() external view returns (address[] memory) {
+        return providers;
+    }
+    
+    /**
+     * @dev Get number of providers
+     * @return Number of providers
+     */
+    function getProvidersCount() external view returns (uint256) {
+        return providers.length;
     }
     
     // Required for UUPS

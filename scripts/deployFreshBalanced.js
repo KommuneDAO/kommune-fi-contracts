@@ -102,7 +102,7 @@ async function main() {
         [
             WKAIA,                      // asset (WKAIA)
             newDeployments.vaultCore,   // vaultCore
-            1000,                       // basisPointsFees (10%)
+            30,                         // basisPointsFees (0.3% default)
             TREASURY                    // treasury address
         ],
         { 
