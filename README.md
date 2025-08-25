@@ -26,6 +26,7 @@ scripts/
 ├── deployFresh.js         # Fresh deployment script
 ├── upgradeAll.js          # Upgrade all contracts
 ├── setAPY.js              # Configure APY settings
+├── recoverSwapAssets.js   # Recover stranded assets from SwapContract
 └── tests/                 # Integration test suite
 
 docs/
@@ -173,9 +174,32 @@ Configurable across 4 LSTs based on current staking rewards:
 - External library for complex calculations
 - Clean separation of concerns
 
+## Maintenance & Operations
+
+### Asset Recovery from SwapContract
+SwapContract may occasionally have stranded assets due to swap failures or partial executions. Run the recovery script periodically:
+
+```bash
+# Check and recover stranded assets (Testnet)
+npx hardhat run scripts/recoverSwapAssets.js --network kairos
+
+# Mainnet
+npx hardhat run scripts/recoverSwapAssets.js --network kaia
+```
+
+**Recommended Schedule**: Weekly or after any reported swap failures
+
+The script will:
+1. Check all token balances in SwapContract
+2. Report any stranded assets found
+3. Recover them to VaultCore (owner-only operation)
+4. Verify successful recovery
+
 ## Important Notes
 
 ⚠️ **SwapContract is FINALIZED**: The SwapContract has been thoroughly tested with all 4 LSTs and should NOT be modified.
+
+⚠️ **Asset Recovery**: SwapContract now includes `returnAssetsToVault()` function for recovering stranded tokens (requires upgrade).
 
 ⚠️ **Use V2 Architecture**: The separated vault architecture (ShareVault + VaultCore) is the recommended deployment.
 

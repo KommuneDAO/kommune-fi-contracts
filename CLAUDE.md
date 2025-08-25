@@ -86,11 +86,45 @@
    scripts/temp/newTestScript.js
    ```
 
+### SwapContract Asset Recovery (2025-08-25)
+
+**⚠️ IMPORTANT: SwapContract may occasionally have stranded assets that need recovery**
+
+#### Potential Causes:
+1. **Swap failures**: If a swap fails after tokens are transferred to SwapContract
+2. **Partial swaps**: Unused tokens after successful swaps  
+3. **Rescue failures**: If `rescueToken()` call fails in error handling
+
+#### Solution: Asset Recovery Functions
+SwapContract now includes recovery functions (requires upgrade):
+- `returnAssetsToVault(address[] tokens)`: Recover specified tokens to VaultCore
+- `getTokenBalances(address[] tokens)`: Check balances before recovery
+- **Owner-only**: Only the contract owner can execute recovery
+- **Safe transfer**: All tokens go to authorized VaultCore address
+- **Event logging**: AssetReturned events for transparency
+
+#### Recovery Process:
+```bash
+# Run the asset recovery script periodically (e.g., weekly)
+npx hardhat run scripts/recoverSwapAssets.js --network kairos
+
+# For mainnet
+npx hardhat run scripts/recoverSwapAssets.js --network kaia
+```
+
+The script (`scripts/recoverSwapAssets.js`) will:
+1. Check all known token balances in SwapContract
+2. Report any stranded assets found
+3. Recover them to VaultCore if authorized
+4. Verify successful recovery
+
+**Maintenance Schedule**: Run recovery script weekly or after any major swap failures
+
 ### SwapContract.sol - FINALIZED (DO NOT MODIFY)
 
 **⚠️ IMPORTANT: SwapContract.sol has been finalized and thoroughly tested. DO NOT modify this file under any circumstances.**
 
-#### Status: ✅ FINALIZED on 2025-08-14
+#### Status: ✅ FINALIZED on 2025-08-14 (Asset recovery functions added 2025-08-25)
 
 The SwapContract has been:
 - Fully tested with all 4 LSTs (wKoKAIA, wGCKAIA, wstKLAY, stKAIA)

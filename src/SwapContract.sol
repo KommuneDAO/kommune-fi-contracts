@@ -238,6 +238,42 @@ contract SwapContract is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
     
     /**
+     * @dev Return all assets to VaultCore
+     * Owner can periodically call this to recover any stranded tokens
+     * @param tokens Array of ERC20 token addresses to recover
+     */
+    function returnAssetsToVault(address[] calldata tokens) external onlyOwner {
+        require(authorizedCaller != address(0), "Authorized caller not set");
+        
+        for (uint256 i = 0; i < tokens.length; i++) {
+            address token = tokens[i];
+            uint256 balance = IERC20(token).balanceOf(address(this));
+            
+            if (balance > 0) {
+                IERC20(token).transfer(authorizedCaller, balance);
+                emit AssetReturned(token, balance, authorizedCaller);
+            }
+        }
+    }
+    
+    /**
+     * @dev Get balance of multiple tokens in this contract
+     * Helper function for checking stranded assets
+     * @param tokens Array of ERC20 token addresses to check
+     * @return balances Array of token balances
+     */
+    function getTokenBalances(address[] calldata tokens) external view returns (uint256[] memory balances) {
+        balances = new uint256[](tokens.length);
+        for (uint256 i = 0; i < tokens.length; i++) {
+            balances[i] = IERC20(tokens[i]).balanceOf(address(this));
+        }
+        return balances;
+    }
+    
+    // Event for asset recovery
+    event AssetReturned(address indexed token, uint256 amount, address indexed recipient);
+    
+    /**
      * @dev Required override for UUPS upgradeable contracts
      */
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
