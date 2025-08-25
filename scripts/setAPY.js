@@ -7,40 +7,80 @@ async function main() {
     const [signer] = await ethers.getSigners();
     console.log("Signer:", signer.address);
     
-    const deployment = JSON.parse(fs.readFileSync("./deployments-kairos.json", 'utf8'));
-    const vault = await ethers.getContractAt("KVaultV2", deployment.KVaultV2);
-    console.log("Vault:", deployment.KVaultV2);
+    // Detect network and load appropriate deployment file
+    const chainId = (await ethers.provider.getNetwork()).chainId;
+    const networkName = chainId === 8217n ? "kaia" : "kairos";
+    console.log("Network:", networkName);
+    
+    // Try different deployment file patterns
+    let deployment;
+    let deploymentFile;
+    
+    // Try stable deployment first
+    if (fs.existsSync(`./deployments-stable-${networkName}.json`)) {
+        deploymentFile = `./deployments-stable-${networkName}.json`;
+        deployment = JSON.parse(fs.readFileSync(deploymentFile, 'utf8'));
+    } 
+    // Try regular deployment
+    else if (fs.existsSync(`./deployments-${networkName}.json`)) {
+        deploymentFile = `./deployments-${networkName}.json`;
+        deployment = JSON.parse(fs.readFileSync(deploymentFile, 'utf8'));
+    } 
+    else {
+        throw new Error(`No deployment file found for ${networkName}`);
+    }
+    
+    console.log("Using deployment file:", deploymentFile);
+    
+    // Load VaultCore contract
+    if (!deployment.vaultCore) {
+        throw new Error("No VaultCore contract found in deployment");
+    }
+    
+    const vault = await ethers.getContractAt("VaultCore", deployment.vaultCore);
+    console.log("VaultCore:", deployment.vaultCore);
     
     // Get current APY values
     console.log("\nCurrent APY values:");
-    const currentAPYs = await vault.getAllAPY();
-    console.log("  koKAIA:", currentAPYs[0].toString());
-    console.log("  gcKAIA:", currentAPYs[1].toString());
-    console.log("  stKLAY:", currentAPYs[2].toString());
-    console.log("  stKAIA:", currentAPYs[3].toString());
+    let currentAPYs = [];
+    for (let i = 0; i < 4; i++) {
+        currentAPYs[i] = await vault.lstAPY(i);
+    }
     
-    // Set new APY values
-    const newAPYs = [755, 655, 555, 738]; // 7.55%, 6.55%, 5.55%, 7.38%
+    console.log("  wKoKAIA:", currentAPYs[0].toString(), `(${Number(currentAPYs[0]) / 100}%)`);
+    console.log("  wGCKAIA:", currentAPYs[1].toString(), `(${Number(currentAPYs[1]) / 100}%)`);
+    console.log("  wstKLAY:", currentAPYs[2].toString(), `(${Number(currentAPYs[2]) / 100}%)`);
+    console.log("  stKAIA: ", currentAPYs[3].toString(), `(${Number(currentAPYs[3]) / 100}%)`);
+    
+    // Set new APY values - Actual production values
+    const newAPYs = [709, 556, 709, 550]; // 7.09%, 5.56%, 7.09%, 5.50%
     console.log("\nSetting new APY values:");
-    console.log("  koKAIA: 755 (7.55%)");
-    console.log("  gcKAIA: 655 (6.55%)");
-    console.log("  stKLAY: 555 (5.55%)");
-    console.log("  stKAIA: 738 (7.38%)");
+    console.log("  wKoKAIA: 709 (7.09%)");
+    console.log("  wGCKAIA: 556 (5.56%)");
+    console.log("  wstKLAY: 709 (7.09%)");
+    console.log("  stKAIA:  550 (5.50%)");
     
     try {
-        const tx = await vault.setMultipleAPY(newAPYs);
-        console.log("\nTransaction sent:", tx.hash);
-        const receipt = await tx.wait();
+        // Set APY values one by one
+        console.log("\nSetting APY values...");
+        for (let i = 0; i < 4; i++) {
+            const tx = await vault.setAPY(i, newAPYs[i]);
+            console.log(`  LST ${i}: Transaction sent`);
+            await tx.wait();
+        }
         console.log("✅ APY values updated successfully!");
-        console.log("Gas used:", receipt.gasUsed.toString());
         
         // Verify new APY values
         console.log("\nVerifying new APY values:");
-        const updatedAPYs = await vault.getAllAPY();
-        console.log("  koKAIA:", updatedAPYs[0].toString());
-        console.log("  gcKAIA:", updatedAPYs[1].toString());
-        console.log("  stKLAY:", updatedAPYs[2].toString());
-        console.log("  stKAIA:", updatedAPYs[3].toString());
+        let updatedAPYs = [];
+        for (let i = 0; i < 4; i++) {
+            updatedAPYs[i] = await vault.lstAPY(i);
+        }
+        
+        console.log("  wKoKAIA:", updatedAPYs[0].toString(), `(${Number(updatedAPYs[0]) / 100}%)`);
+        console.log("  wGCKAIA:", updatedAPYs[1].toString(), `(${Number(updatedAPYs[1]) / 100}%)`);
+        console.log("  wstKLAY:", updatedAPYs[2].toString(), `(${Number(updatedAPYs[2]) / 100}%)`);
+        console.log("  stKAIA: ", updatedAPYs[3].toString(), `(${Number(updatedAPYs[3]) / 100}%)`);
         
     } catch (error) {
         console.log("❌ Failed to set APY:", error.message);

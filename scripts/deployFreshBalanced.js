@@ -146,13 +146,13 @@ async function main() {
     const token3 = await vaultCore.tokensInfo(3);
     console.log("   ✅ stKAIA configured:", token3.handler !== "0x0000000000000000000000000000000000000000");
     
-    // 8. Set initial APY
+    // 8. Set initial APY - Actual production values
     console.log("\n8️⃣ Setting initial APY...");
-    await vaultCore.setAPY(0, 2500); // wKoKAIA: 25%
-    await vaultCore.setAPY(1, 2500); // wGCKAIA: 25%
-    await vaultCore.setAPY(2, 2500); // wstKLAY: 25%
-    await vaultCore.setAPY(3, 2500); // stKAIA: 25%
-    console.log("   ✅ APY set to 25% for all LSTs");
+    await vaultCore.setAPY(0, 709); // wKoKAIA: 7.09%
+    await vaultCore.setAPY(1, 556); // wGCKAIA: 5.56%
+    await vaultCore.setAPY(2, 709); // wstKLAY: 7.09%
+    await vaultCore.setAPY(3, 550); // stKAIA: 5.50%
+    console.log("   ✅ APY set to actual production values");
     
     // 9. Set investment ratios FOR BALANCED PROFILE
     console.log("\n9️⃣ Setting investment ratios for BALANCED profile...");
@@ -211,7 +211,7 @@ async function main() {
     const apy2 = await vaultCore.lstAPY(2);
     const apy3 = await vaultCore.lstAPY(3);
     console.log("   APY configured:", 
-        apy0 === 2500n && apy1 === 2500n && apy2 === 2500n && apy3 === 2500n ? "✅" : "❌");
+        apy0 === 709n && apy1 === 556n && apy2 === 709n && apy3 === 550n ? "✅" : "❌");
     
     // Check investment ratios directly from public variables
     const investRatioCheck = await vaultCore.investRatio();

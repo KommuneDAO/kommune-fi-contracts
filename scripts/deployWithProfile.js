@@ -176,13 +176,13 @@ async function main() {
     );
     console.log(`   ✅ Investment ratios set for ${profile} profile`);
     
-    // Set initial APY distribution
+    // Set initial APY distribution - Actual production values
     console.log("\n7. Setting APY distribution...");
-    await vaultCore.setAPY(0, 2500); // wKoKAIA: 25%
-    await vaultCore.setAPY(1, 2500); // wGCKAIA: 25%
-    await vaultCore.setAPY(2, 2500); // wstKLAY: 25%
-    await vaultCore.setAPY(3, 2500); // stKAIA: 25%
-    console.log("   ✅ APY distribution set (25% each)");
+    await vaultCore.setAPY(0, 709); // wKoKAIA: 7.09%
+    await vaultCore.setAPY(1, 556); // wGCKAIA: 5.56%
+    await vaultCore.setAPY(2, 709); // wstKLAY: 7.09%
+    await vaultCore.setAPY(3, 550); // stKAIA: 5.50%
+    console.log("   ✅ APY distribution set to actual production values");
     
     // Save deployment info
     const deploymentInfo = {
