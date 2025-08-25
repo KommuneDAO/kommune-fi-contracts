@@ -205,13 +205,12 @@ async function main() {
     // Test withdrawals with balanced profile
     console.log("\n📤 Testing Withdrawals (BALANCED):");
 
-    // Wallet 2: 50% withdrawal
+    // Wallet 2: 100% withdrawal
     const maxWithdraw2 = await shareVault.maxWithdraw(wallet2.address);
-    const withdraw2Amount = maxWithdraw2 / 2n;
-    if (withdraw2Amount > 0n) {
-        tx = await shareVault2.withdraw(withdraw2Amount, wallet2.address, wallet2.address);
+    if (maxWithdraw2 > 0n) {
+        tx = await shareVault2.withdraw(maxWithdraw2, wallet2.address, wallet2.address);
         await tx.wait();
-        console.log(`  Wallet 2: Withdrew ${ethers.formatEther(withdraw2Amount)} WKAIA (50%)`);
+        console.log(`  Wallet 2: Withdrew ${ethers.formatEther(maxWithdraw2)} WKAIA (100%)`);
     }
 
     // Wallet 3: 100% withdrawal
