@@ -9,6 +9,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 interface IWKaia {
+    function deposit() external payable;
     function withdraw(uint256) external;
 }
 
@@ -150,7 +151,6 @@ contract ShareVault is ERC4626Upgradeable, OwnableUpgradeable, ReentrancyGuardUp
         public
         virtual
         override
-        nonReentrant
         returns (uint256 shares)
     {
         // Call withdrawWithProvider with address(0) for backward compatibility
@@ -199,31 +199,55 @@ contract ShareVault is ERC4626Upgradeable, OwnableUpgradeable, ReentrancyGuardUp
         }
         
         // Request total assets (including fee) from VaultCore
+        // VaultCore will send KAIA back to ShareVault
         if (vaultCore != address(0)) {
+            uint256 kaiaBefore = address(this).balance;
+            
             (bool success,) = vaultCore.call(
                 abi.encodeWithSignature("handleWithdraw(uint256,address)", assets, address(this))
             );
             require(success, "Core withdraw failed");
             
-            // Transfer fees
+            // Check if we received KAIA
+            uint256 kaiaReceived = address(this).balance - kaiaBefore;
+            require(kaiaReceived == assets, "Incorrect KAIA amount received");
+            
+            // Transfer fees in KAIA
             if (providerFee > 0) {
-                IERC20(asset()).safeTransfer(provider, providerFee);
+                (bool providerSent, ) = provider.call{value: providerFee}("");
+                require(providerSent, "Provider fee transfer failed");
             }
             if (treasuryFee > 0) {
-                IERC20(asset()).safeTransfer(treasury, treasuryFee);
+                (bool treasurySent, ) = treasury.call{value: treasuryFee}("");
+                require(treasurySent, "Treasury fee transfer failed");
             }
             
-            // Transfer net amount to receiver
-            IERC20(asset()).safeTransfer(receiver, netAssets);
+            // Transfer net amount to receiver in KAIA
+            (bool receiverSent, ) = receiver.call{value: netAssets}("");
+            require(receiverSent, "KAIA transfer to receiver failed");
         } else {
-            // Fallback: transfer from this contract
-            if (providerFee > 0) {
-                IERC20(asset()).safeTransfer(provider, providerFee);
+            // Fallback: transfer WKAIA from this contract (shouldn't happen normally)
+            // First unwrap WKAIA to KAIA if we have any
+            uint256 wkaiaBalance = IERC20(asset()).balanceOf(address(this));
+            if (wkaiaBalance >= assets) {
+                IWKaia(asset()).withdraw(assets);
+                
+                // Transfer fees in KAIA
+                if (providerFee > 0) {
+                    (bool providerSent, ) = provider.call{value: providerFee}("");
+                    require(providerSent, "Provider fee transfer failed");
+                }
+                if (treasuryFee > 0) {
+                    (bool treasurySent, ) = treasury.call{value: treasuryFee}("");
+                    require(treasurySent, "Treasury fee transfer failed");
+                }
+                
+                // Transfer net amount to receiver in KAIA
+                (bool receiverSent, ) = receiver.call{value: netAssets}("");
+                require(receiverSent, "KAIA transfer to receiver failed");
+            } else {
+                revert("Insufficient balance");
             }
-            if (treasuryFee > 0) {
-                IERC20(asset()).safeTransfer(treasury, treasuryFee);
-            }
-            IERC20(asset()).safeTransfer(receiver, netAssets);
         }
         
         // Burn shares
@@ -295,7 +319,6 @@ contract ShareVault is ERC4626Upgradeable, OwnableUpgradeable, ReentrancyGuardUp
         public
         virtual
         override
-        nonReentrant
         returns (uint256 assets)
     {
         // Call redeemWithProvider with address(0) for backward compatibility
@@ -344,31 +367,55 @@ contract ShareVault is ERC4626Upgradeable, OwnableUpgradeable, ReentrancyGuardUp
         }
         
         // Request total assets (including fee) from VaultCore
+        // VaultCore will send KAIA back to ShareVault
         if (vaultCore != address(0)) {
+            uint256 kaiaBefore = address(this).balance;
+            
             (bool success,) = vaultCore.call(
                 abi.encodeWithSignature("handleWithdraw(uint256,address)", assets, address(this))
             );
             require(success, "Core withdraw failed");
             
-            // Transfer fees
+            // Check if we received KAIA
+            uint256 kaiaReceived = address(this).balance - kaiaBefore;
+            require(kaiaReceived == assets, "Incorrect KAIA amount received");
+            
+            // Transfer fees in KAIA
             if (providerFee > 0) {
-                IERC20(asset()).safeTransfer(provider, providerFee);
+                (bool providerSent, ) = provider.call{value: providerFee}("");
+                require(providerSent, "Provider fee transfer failed");
             }
             if (treasuryFee > 0) {
-                IERC20(asset()).safeTransfer(treasury, treasuryFee);
+                (bool treasurySent, ) = treasury.call{value: treasuryFee}("");
+                require(treasurySent, "Treasury fee transfer failed");
             }
             
-            // Transfer net amount to receiver
-            IERC20(asset()).safeTransfer(receiver, netAssets);
+            // Transfer net amount to receiver in KAIA
+            (bool receiverSent, ) = receiver.call{value: netAssets}("");
+            require(receiverSent, "KAIA transfer to receiver failed");
         } else {
-            // Fallback: transfer from this contract
-            if (providerFee > 0) {
-                IERC20(asset()).safeTransfer(provider, providerFee);
+            // Fallback: transfer WKAIA from this contract (shouldn't happen normally)
+            // First unwrap WKAIA to KAIA if we have any
+            uint256 wkaiaBalance = IERC20(asset()).balanceOf(address(this));
+            if (wkaiaBalance >= assets) {
+                IWKaia(asset()).withdraw(assets);
+                
+                // Transfer fees in KAIA
+                if (providerFee > 0) {
+                    (bool providerSent, ) = provider.call{value: providerFee}("");
+                    require(providerSent, "Provider fee transfer failed");
+                }
+                if (treasuryFee > 0) {
+                    (bool treasurySent, ) = treasury.call{value: treasuryFee}("");
+                    require(treasurySent, "Treasury fee transfer failed");
+                }
+                
+                // Transfer net amount to receiver in KAIA
+                (bool receiverSent, ) = receiver.call{value: netAssets}("");
+                require(receiverSent, "KAIA transfer to receiver failed");
+            } else {
+                revert("Insufficient balance");
             }
-            if (treasuryFee > 0) {
-                IERC20(asset()).safeTransfer(treasury, treasuryFee);
-            }
-            IERC20(asset()).safeTransfer(receiver, netAssets);
         }
         
         // Burn shares
@@ -392,9 +439,13 @@ contract ShareVault is ERC4626Upgradeable, OwnableUpgradeable, ReentrancyGuardUp
     }
     
     /**
-     * @dev Receive KAIA (needed for WKAIA.withdraw)
+     * @dev Receive KAIA from VaultCore for withdrawal distribution
      */
-    receive() external payable {}
+    receive() external payable {
+        // Only accept KAIA from VaultCore
+        require(msg.sender == vaultCore, "Only VaultCore");
+        // KAIA will be distributed directly to users/treasury/providers
+    }
     
     /**
      * @dev Native KAIA deposit (payable)

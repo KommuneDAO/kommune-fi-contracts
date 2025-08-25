@@ -23,7 +23,6 @@ contract ClaimManager is SharedStorage {
     // Events
     event UnstakeRequested(address indexed user, uint256 indexed lstIndex, uint256 amount, uint256 timestamp);
     event Claimed(address indexed user, uint256 indexed lstIndex, uint256 amount);
-    event Debug(string message, address addr, uint256 value);
     
     address internal constant BugHole = 0x1856E6fDbF8FF701Fa1aB295E1bf229ABaB56899;
     
@@ -33,13 +32,8 @@ contract ClaimManager is SharedStorage {
         
         TokenInfo memory info = tokensInfo[index];
         
-        // Debug: emit token info
-        emit Debug("Handler", info.handler, 0);
-        emit Debug("Asset", info.asset, 0);
-        
         // Check balance
         uint256 balance = IERC20(info.asset).balanceOf(address(this));
-        emit Debug("Balance", address(this), balance);
         require(balance >= amount, "Insufficient balance");
         
         // Approve if needed

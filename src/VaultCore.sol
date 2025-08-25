@@ -36,7 +36,7 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
     event KAIADeposited(uint256 amount);
     event StakeExecuted(uint256 amount);
     event SwapExecuted(uint256 index, uint256 amountIn, uint256 amountOut);
-    event DirectDepositFrom(address indexed depositor, uint256 amount);
+    event DepositProcessed(address indexed depositor, uint256 amount);
     event WrappedUnstake(address indexed user, uint256 indexed lstIndex, uint256 amount);
     event Claimed(address indexed user, uint256 indexed lstIndex, uint256 amount);
     event LiquidityAdded(uint256 indexed lstIndex, uint256 tokenAmount, uint256 lpReceived);
@@ -235,6 +235,9 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
         if (msg.sender != shareVault) revert("E1");
         if (amount == 0) revert("E2");
         
+        // Emit event to track depositor
+        emit DepositProcessed(depositor, amount);
+        
         // Verify WKAIA was received
         uint256 wkaiaBalance = IERC20(wkaia).balanceOf(address(this));
         if (wkaiaBalance < amount) revert("E4");
@@ -307,6 +310,8 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
     
     /**
      * @dev Handle withdrawal request from ShareVault
+     * Due to WKAIA's unusual transfer implementation with proxy contracts,
+     * we always unwrap WKAIA to KAIA and send KAIA back to ShareVault
      */
     function handleWithdraw(uint256 amount, address recipient) external returns (bool) {
         if (msg.sender != shareVault) revert("E1");
@@ -316,8 +321,10 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
         uint256 wkaiaBalance = IERC20(wkaia).balanceOf(address(this));
         
         if (wkaiaBalance >= amount) {
-            // Direct transfer if we have enough WKAIA
-            IERC20(wkaia).safeTransfer(recipient, amount);
+            // Unwrap WKAIA to KAIA and send to ShareVault
+            IWKaia(wkaia).withdraw(amount);
+            (bool success, ) = shareVault.call{value: amount}("");
+            require(success, "KAIA transfer to ShareVault failed");
         } else {
             // Need to swap LSTs to WKAIA
             uint256 needed = amount - wkaiaBalance;
@@ -405,25 +412,26 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
                         try SwapContract(swapContract).rescueToken(tokenToSwap, availableBalance) {
                             // Retrieved the LST back
                         } catch {
-                            // LST stuck in SwapContract
+                            // LST stuck in SwapContract, will be recovered later
                         }
                         
-                        // For debugging: check if it's a specific error we can handle
                         if (reason.length > 0) {
-                            // Could add specific error handling here
-                            // For now, continue to next LST
+                            // Swap failed, continue to next LST
                         }
                     }
                 }
             }
             
-            // Transfer all available WKAIA
+            // Transfer all available WKAIA as KAIA to ShareVault
             wkaiaBalance = IERC20(wkaia).balanceOf(address(this));
             
             // If we still don't have enough after swaps, revert
             if (wkaiaBalance < amount) revert("E6");
             
-            IERC20(wkaia).safeTransfer(recipient, amount);
+            // Unwrap WKAIA to KAIA and send to ShareVault
+            IWKaia(wkaia).withdraw(amount);
+            (bool success, ) = shareVault.call{value: amount}("");
+            require(success, "KAIA transfer to ShareVault failed");
         }
         
         emit AssetsWithdrawn(amount, recipient);
