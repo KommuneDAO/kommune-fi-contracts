@@ -245,7 +245,7 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
             IWKaia(wkaia).withdraw(amountToInvest);
             
             // First invest all to get LSTs
-            _processInvestment(amountToInvest, false);  // false = don't add to pool yet
+            _processInvestment(amountToInvest);  // false = don't add to pool yet
             
             // Then add portion of LSTs to pools if configured
             if (balancedRatio > 0) {
@@ -253,7 +253,7 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
             }
             
             if (aggressiveRatio > 0) {
-                _addLSTsToPool2(aggressiveRatio);
+                _investMEV(aggressiveRatio);
             }
             
             emit StakeExecuted(amountToInvest);
@@ -277,7 +277,7 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
         
         if (amountToInvest > 0) {
             // First invest all to get LSTs
-            _processInvestment(amountToInvest, false);  // false = don't add to pool yet
+            _processInvestment(amountToInvest);  // false = don't add to pool yet
             
             // Then add portion of LSTs to pools if configured
             if (balancedRatio > 0) {
@@ -285,7 +285,7 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
             }
             
             if (aggressiveRatio > 0) {
-                _addLSTsToPool2(aggressiveRatio);
+                _investMEV(aggressiveRatio);
             }
             
             emit StakeExecuted(amountToInvest);
@@ -451,20 +451,10 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
     /**
      * @dev Process investment based on strategy (internal helper)
      * @param kaiaAmount Amount of KAIA to invest
-     * @param addToPool If true, add received LSTs to Balancer pools (for balanced strategy)
      */
-    function _processInvestment(uint256 kaiaAmount, bool addToPool) private {
+    function _processInvestment(uint256 kaiaAmount) private {
         // Distribute KAIA to LSTs based on APY
         _distributToLSTs(kaiaAmount);
-        
-        // For balanced strategy, add received LSTs to pools
-        if (addToPool) {
-            for (uint256 i = 0; i < 4; i++) {
-                if (lstAPY[i] > 0) {
-                    _addLiquidityToPool(i);
-                }
-            }
-        }
     }
     
     /**
@@ -583,7 +573,7 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
      * @dev Add portion of LSTs to pool2 for aggressive LP tokens (future)
      * @param ratio Percentage of LSTs to add (in basis points)
      */
-    function _addLSTsToPool2(uint256 ratio) private {
+    function _investMEV(uint256 ratio) private {
         // Future implementation for pool2
         // For now, keep LSTs as is
     }
@@ -780,75 +770,6 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
     }
     
     /**
-     * @dev Add liquidity to Balancer pool for a specific LST
-     * @param lstIndex Index of the LST (0-3)
-     */
-    function _addLiquidityToPool(uint256 lstIndex) private {
-        TokenInfo memory info = tokensInfo[lstIndex];
-        
-        // Get wrapped token balance
-        uint256 tokenBalance = IERC20(info.tokenA).balanceOf(address(this));
-        if (tokenBalance == 0) return;
-        
-        // Prepare assets array for pool1
-        IAsset[] memory assets = new IAsset[](2);
-        assets[0] = IAsset(info.tokenA);  // Wrapped LST token
-        assets[1] = IAsset(info.tokenB);  // Intermediate token
-        
-        // Prepare amounts - we're providing only tokenA
-        uint256[] memory maxAmountsIn = new uint256[](2);
-        maxAmountsIn[0] = tokenBalance;
-        maxAmountsIn[1] = 0; // We're doing single-sided liquidity
-        
-        // Encode userData for EXACT_TOKENS_IN_FOR_BPT_OUT
-        // JOIN_KIND = 1, amountsIn array, minimumBPT
-        uint256[] memory amountsIn = new uint256[](2);
-        amountsIn[0] = tokenBalance;
-        amountsIn[1] = 0;
-        uint256 minimumBPT = 0; // Accept any amount of LP tokens
-        
-        bytes memory userData = abi.encode(
-            IBalancerVaultExtended.JoinKind.EXACT_TOKENS_IN_FOR_BPT_OUT,
-            amountsIn,
-            minimumBPT
-        );
-        
-        // Approve Balancer Vault to spend our tokens
-        IERC20(info.tokenA).approve(balancerVault, tokenBalance);
-        
-        // Get LP token address before join
-        (address[] memory poolTokens, , ) = IBalancerVaultExtended(balancerVault).getPoolTokens(info.pool1);
-        address lpToken = _findLPToken(poolTokens, info.tokenA, info.tokenB);
-        uint256 lpBefore = lpToken != address(0) ? IERC20(lpToken).balanceOf(address(this)) : 0;
-        
-        // Join the pool
-        IBalancerVaultExtended.JoinPoolRequest memory request = IBalancerVaultExtended.JoinPoolRequest({
-            assets: assets,
-            maxAmountsIn: maxAmountsIn,
-            userData: userData,
-            fromInternalBalance: false
-        });
-        
-        IBalancerVaultExtended(balancerVault).joinPool(
-            info.pool1,
-            address(this),
-            address(this),
-            request
-        );
-        
-        // Track LP tokens received
-        uint256 lpAfter = lpToken != address(0) ? IERC20(lpToken).balanceOf(address(this)) : 0;
-        uint256 lpReceived = lpAfter - lpBefore;
-        
-        if (lpReceived > 0) {
-            // All LSTs share the same pool and BPT token, so always use index 0
-            lpBalance = lpAfter;  // Store total BPT balance
-            lpToken = lpToken;    // Store BPT token address
-            emit LiquidityAdded(lstIndex, tokenBalance, lpReceived);
-        }
-    }
-    
-    /**
      * @dev Remove liquidity from Balancer pool (owner only)
      * @param lstIndex Index of the LST (0-3)
      * @param lpAmount Amount of LP tokens to remove
@@ -916,24 +837,6 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
         
         emit LiquidityRemoved(lstIndex, lpAmount, totalReceived);
     }
-    
-    /**
-     * @dev Add liquidity manually for a specific LST (owner only)
-     * This allows adding liquidity outside of the investment flow
-     * @param lstIndex Index of the LST (0-3)
-     * @param amount Amount of wrapped LST tokens to add as liquidity
-     */
-    function addLiquidityManual(uint256 lstIndex, uint256 amount) external onlyOwner {
-        if (lstIndex >= 4) revert("E3");
-        if (amount == 0) revert("E2");
-        
-        TokenInfo memory info = tokensInfo[lstIndex];
-        uint256 balance = IERC20(info.tokenA).balanceOf(address(this));
-        if (balance < amount) revert("E23");
-        
-        _addLiquidityToPool(lstIndex);
-    }
-    
     
     /**
      * @dev Helper function to find LP token from pool tokens
