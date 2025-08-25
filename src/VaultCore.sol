@@ -318,8 +318,36 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
             // Need to swap LSTs to WKAIA
             uint256 needed = amount - wkaiaBalance;
             
-            // Try to get WKAIA from LSTs via swap
-            for (uint256 i = 0; i < 4 && needed > 0; i++) {
+            // Create array of indices sorted by APY (lowest first)
+            uint256[4] memory sortedIndices;
+            uint256[4] memory apyValues;
+            
+            // Initialize with original indices and APY values
+            for (uint256 i = 0; i < 4; i++) {
+                sortedIndices[i] = i;
+                apyValues[i] = lstAPY[i];
+            }
+            
+            // Sort indices by APY (bubble sort for simplicity with 4 elements)
+            for (uint256 i = 0; i < 3; i++) {
+                for (uint256 j = 0; j < 3 - i; j++) {
+                    if (apyValues[j] > apyValues[j + 1]) {
+                        // Swap APY values
+                        uint256 tempAPY = apyValues[j];
+                        apyValues[j] = apyValues[j + 1];
+                        apyValues[j + 1] = tempAPY;
+                        
+                        // Swap indices
+                        uint256 tempIndex = sortedIndices[j];
+                        sortedIndices[j] = sortedIndices[j + 1];
+                        sortedIndices[j + 1] = tempIndex;
+                    }
+                }
+            }
+            
+            // Try to get WKAIA from LSTs via swap (in APY order)
+            for (uint256 idx = 0; idx < 4 && needed > 0; idx++) {
+                uint256 i = sortedIndices[idx];
                 TokenInfo memory info = tokensInfo[i];
                 
                 // Get available token balance for swap
@@ -328,8 +356,15 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
                 
                 // Now swap if we have available tokens
                 if (availableBalance > 0) {
-                    // Calculate desired WKAIA output with slippage buffer (like KommuneVaultV2)
-                    uint256 targetWKAIA = (needed * 110) / 100; // 10% buffer for slippage tolerance
+                    // Calculate desired WKAIA output with configurable slippage buffer
+                    uint256 targetWKAIA = (needed * (10000 + slippage)) / 10000; // Add slippage buffer (slippage in basis points)
+                    
+                    // If target is too high for available balance, use what we can get
+                    // Estimate max output based on available balance (assume ~90% efficiency)
+                    uint256 estimatedMaxOutput = (availableBalance * 90) / 100;
+                    if (targetWKAIA > estimatedMaxOutput) {
+                        targetWKAIA = estimatedMaxOutput; // Use realistic target
+                    }
                     
                     // Transfer the token to SwapContract
                     IERC20(tokenToSwap).safeTransfer(swapContract, availableBalance);
@@ -337,11 +372,11 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
                     // Get WKAIA balance before swap
                     uint256 wkaiaBefore = IERC20(wkaia).balanceOf(address(this));
                     
-                    // Execute swap with conservative target to prevent input amount overflow
+                    // Execute swap with adjusted target
                     try SwapContract(swapContract).swapGivenOut(
                         info,
                         balancerVault,
-                        targetWKAIA,    // WKAIA target with 10% buffer
+                        targetWKAIA,    // Adjusted target (either needed*110% or what's possible)
                         availableBalance // Maximum LST input available
                     ) returns (int256[] memory deltas) {
                         // Calculate actual WKAIA received
@@ -602,6 +637,11 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
     function setInvestRatio(uint256 _investRatio) external onlyOwner {
         if (_investRatio > 10000) revert("E12");
         investRatio = _investRatio;
+    }
+    
+    function setSlippage(uint256 _slippage) external onlyOwner {
+        if (_slippage > 10000) revert("Slippage too high");
+        slippage = _slippage;
     }
     
     function setAPY(uint256 index, uint256 apy) external onlyOwner {

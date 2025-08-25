@@ -766,6 +766,51 @@ userData: abi.encode(1, amountsForUserData, 0)  // JOIN_KIND_EXACT_TOKENS_IN_FOR
 - Successful tx: 0x497d271f... (provided by user) shows correct encoding pattern
 - This pattern is now implemented in VaultCore._addLSTsToPool1()
 
+### Sequential Swap with APY-based Ordering (2025-08-25)
+
+**✅ IMPLEMENTED: APY-based sequential swap with configurable slippage**
+
+#### Key Features:
+1. **APY-based Swap Priority**: Swaps use LSTs with lowest APY first to minimize loss
+2. **Sequential Fallback**: If one LST can't provide enough, automatically moves to next LST
+3. **Configurable Slippage**: Owner can adjust slippage tolerance (default 10%)
+
+#### Technical Implementation:
+
+**1. APY-based Ordering (VaultCore.sol lines 321-346):**
+- Bubble sort implementation to order LSTs by APY (ascending)
+- Lowest APY LSTs are used first for swaps
+- Example: APY values [7000, 1000, 1000, 1000] → swap order: indices [1,2,3,0]
+
+**2. Sequential Swap Logic (VaultCore.sol lines 347-405):**
+- Try-catch pattern allows swap failures to be handled gracefully
+- Each LST swaps what it can provide, remainder moves to next LST
+- Continues until withdrawal amount is satisfied or all LSTs exhausted
+
+**3. Configurable Slippage (VaultCore.sol):**
+```solidity
+// Set slippage (basis points, 1000 = 10%)
+function setSlippage(uint256 _slippage) external onlyOwner {
+    if (_slippage > 10000) revert("Slippage too high");
+    slippage = _slippage;
+}
+
+// Usage in withdrawal
+uint256 targetWKAIA = (needed * (10000 + slippage)) / 10000;
+```
+
+#### Configuration Parameters:
+- **Default Slippage**: 1000 basis points (10%)
+- **Slippage Range**: 0-10000 (0-100%)
+- **Recommended for Testnet**: 1500-2000 (15-20%) due to low liquidity
+- **Recommended for Mainnet**: 500-1000 (5-10%) with better liquidity
+
+#### Test Results:
+- ✅ APY ordering correctly prioritizes lowest APY first
+- ✅ Sequential swaps execute when single LST insufficient
+- ✅ Failed swaps automatically skip to next LST
+- ✅ Slippage configuration works as expected
+
 ## Session History
 - Initial V1: Single contract (KommuneVault)
 - V1.5: Optimized KVaultV2 hit 24KB size limit  
