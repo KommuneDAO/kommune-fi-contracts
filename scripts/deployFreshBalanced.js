@@ -71,8 +71,8 @@ async function main() {
         }
     });
     
-    // Default investRatio: 90% for maximum user returns
-    const investRatio = 9000; // 90% to maximize investment returns
+    // Default investRatio: 100% for maximum investment in LSTs
+    const investRatio = 10000; // 100% to LSTs (no WKAIA buffer)
     
     const vaultCore = await upgrades.deployProxy(
         VaultCore,
@@ -92,7 +92,7 @@ async function main() {
     await vaultCore.waitForDeployment();
     newDeployments.vaultCore = await vaultCore.getAddress();
     console.log("   ✅ VaultCore deployed at:", newDeployments.vaultCore);
-    console.log("   📊 Investment Ratio: 90% (maximizing user returns)");
+    console.log("   📊 Investment Ratio: 100% (all funds to LSTs, no buffer)");
     
     // 5. Deploy ShareVault (UUPS Proxy) 
     console.log("\n5️⃣ Deploying ShareVault (UUPS proxy)...");
@@ -157,15 +157,15 @@ async function main() {
     // 9. Set investment ratios FOR BALANCED PROFILE
     console.log("\n9️⃣ Setting investment ratios for BALANCED profile...");
     await vaultCore.setInvestmentRatios(
-        9000,  // 90% total investment ratio
-        5000,  // 50% of LST to balanced (LP pools)
-        0      // 0% to aggressive
+        10000,  // 100% total investment ratio
+        5000,   // 50% of LST to balanced (LP pools)
+        0       // 0% to aggressive
     );
     console.log("   ✅ Investment ratios configured:");
-    console.log("      - Total Investment: 90%");
-    console.log("      - Balanced: 50% of LST → LP (45% of total)");
-    console.log("      - Stable: 50% of LST remains (45% of total)");
-    console.log("      - Liquidity Buffer: 10%");
+    console.log("      - Total Investment: 100%");
+    console.log("      - Balanced: 50% of LST → LP (50% of total)");
+    console.log("      - Stable: 50% of LST remains (50% of total)");
+    console.log("      - Liquidity Buffer: 0%");
     
     // 10. Save deployment addresses
     console.log("\n🔟 Saving deployment addresses...");
@@ -232,10 +232,10 @@ async function main() {
     console.log("  ClaimManager:", newDeployments.claimManager);
     console.log("  WKAIA:", newDeployments.wkaia);
     console.log("\n📊 Investment Profile: BALANCED");
-    console.log("  Total Investment: 90%");
-    console.log("  Balanced Strategy: 50% of LST → LP (45% of total)");
-    console.log("  Stable Strategy: 50% of LST remains (45% of total)");
-    console.log("  Liquidity Buffer: 10%");
+    console.log("  Total Investment: 100%");
+    console.log("  Balanced Strategy: 50% of LST → LP (50% of total)");
+    console.log("  Stable Strategy: 50% of LST remains (50% of total)");
+    console.log("  Liquidity Buffer: 0%");
     console.log("\n💡 Next Steps:");
     console.log("  1. Run balanced integration tests: npx hardhat run scripts/tests/testIntegratedBalanced.js --network", networkName);
     console.log("  2. Monitor LP positions and yields");

@@ -151,9 +151,9 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
         ];
         
         // Simplified structure - same pools and tokenB for all LSTs
-        bytes32 pool1 = 0xcc163330e85c34788840773e32917e2f51878b95000000000000000000000015;
-        bytes32 pool2 = 0x6634d606f477a7fb14159839a9b7ad9ad4295436000000000000000000000016;
-        address tokenB = 0xCC163330E85C34788840773E32917E2F51878B95; // Common intermediate token
+        bytes32 pool1 = 0x730294c498e24846ad944b888fea2ba76ed7b21e000000000000000000000019;
+        bytes32 pool2 = 0x689280edb07859d5e7ad25bcb6e378faa9f81a5a00000000000000000000001b;
+        address tokenB = 0x730294C498e24846AD944b888Fea2bA76ed7B21E; // Common intermediate token
         
         // Set the same pools for all LSTs
         for (uint256 i = 0; i < 4; i++) {
@@ -527,12 +527,12 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
             assets[4] = IAsset(tokensInfo[1].tokenA); // wGCKAIA (LST index 1)
             assets[5] = IAsset(tokensInfo[0].tokenA); // wKoKAIA (LST index 0)
         } else {
-            // Testnet order: wGCKAIA, stKAIA, wstKLAY, wKoKAIA, BPT
+            // Testnet order: wGCKAIA, stKAIA, wstKLAY, BPT, wKoKAIA
             assets[0] = IAsset(tokensInfo[1].tokenA); // wGCKAIA (LST index 1)
             assets[1] = IAsset(tokensInfo[3].tokenA); // stKAIA  (LST index 3)
             assets[2] = IAsset(tokensInfo[2].tokenA); // wstKLAY (LST index 2)
-            assets[3] = IAsset(tokensInfo[0].tokenA); // wKoKAIA (LST index 0)
-            assets[4] = IAsset(tokensInfo[0].tokenB); // BPT/tokenB
+            assets[3] = IAsset(tokensInfo[0].tokenB); // BPT/tokenB
+            assets[4] = IAsset(tokensInfo[0].tokenA); // wKoKAIA (LST index 0)
         }
         
         // Calculate and set amounts for each LST
@@ -604,15 +604,15 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
                 }
             }
             
-            if (lstBalances[0] > 0 && lstAPY[0] > 0) { // wKoKAIA at index 3
-                maxAmountsIn[3] = (lstBalances[0] * ratio) / 10000;
-                if (maxAmountsIn[3] > 0) {
+            maxAmountsIn[3] = 0; // BPT - always 0
+            
+            if (lstBalances[0] > 0 && lstAPY[0] > 0) { // wKoKAIA at index 4
+                maxAmountsIn[4] = (lstBalances[0] * ratio) / 10000;
+                if (maxAmountsIn[4] > 0) {
                     hasLiquidity = true;
-                    IERC20(tokensInfo[0].tokenA).approve(balancerVault, maxAmountsIn[3]);
+                    IERC20(tokensInfo[0].tokenA).approve(balancerVault, maxAmountsIn[4]);
                 }
             }
-            
-            maxAmountsIn[4] = 0; // BPT - always 0
         }
         
         // Only proceed if we have liquidity to add
@@ -905,12 +905,12 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
             assets[4] = IAsset(tokensInfo[1].tokenA); // wGCKAIA
             assets[5] = IAsset(tokensInfo[0].tokenA); // wKoKAIA
         } else {
-            // Testnet order: wGCKAIA, stKAIA, wstKLAY, wKoKAIA, BPT
+            // Testnet order: wGCKAIA, stKAIA, wstKLAY, BPT, wKoKAIA
             assets[0] = IAsset(tokensInfo[1].tokenA); // wGCKAIA
             assets[1] = IAsset(tokensInfo[3].tokenA); // stKAIA
             assets[2] = IAsset(tokensInfo[2].tokenA); // wstKLAY
-            assets[3] = IAsset(tokensInfo[0].tokenA); // wKoKAIA
-            assets[4] = IAsset(tokensInfo[0].tokenB); // BPT
+            assets[3] = IAsset(tokensInfo[0].tokenB); // BPT
+            assets[4] = IAsset(tokensInfo[0].tokenA); // wKoKAIA
         }
         
         // Minimum amounts out (0 = accept any amount)
@@ -922,17 +922,25 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
         // We exit to the token that matches lstIndex
         uint256 exitTokenIndex;
         if (isMainnet) {
-            // Mainnet token indices
-            if (lstIndex == 0) exitTokenIndex = 5;      // wKoKAIA at index 5
-            else if (lstIndex == 1) exitTokenIndex = 4; // wGCKAIA at index 4
+            // Mainnet token indices (BPT excluded from counting)
+            // Pool tokens: [wstKLAY(0), stKAIA(1), BPT(2), SKLAY(3), wGCKAIA(4), wKoKAIA(5)]
+            // Exit indices: [wstKLAY(0), stKAIA(1), SKLAY(2), wGCKAIA(3), wKoKAIA(4)] - BPT excluded
+            if (lstIndex == 0) exitTokenIndex = 4;      // wKoKAIA at index 4 (after BPT exclusion)
+            else if (lstIndex == 1) exitTokenIndex = 3; // wGCKAIA at index 3 (after BPT exclusion)
             else if (lstIndex == 2) exitTokenIndex = 0; // wstKLAY at index 0
             else exitTokenIndex = 1;                    // stKAIA at index 1
         } else {
-            // Testnet token indices
-            if (lstIndex == 0) exitTokenIndex = 3;      // wKoKAIA at index 3
-            else if (lstIndex == 1) exitTokenIndex = 0; // wGCKAIA at index 0
-            else if (lstIndex == 2) exitTokenIndex = 2; // wstKLAY at index 2
-            else exitTokenIndex = 1;                    // stKAIA at index 1
+            // Testnet: exitTokenIndex refers to sorted non-BPT tokens
+            // Sorted order (excluding BPT): [wGCKAIA, stKAIA, wstKLAY, wKoKAIA]
+            // Our lstIndex mapping:
+            // lstIndex 0 (wKoKAIA) → sorted index 3
+            // lstIndex 1 (wGCKAIA) → sorted index 0
+            // lstIndex 2 (wstKLAY) → sorted index 2
+            // lstIndex 3 (stKAIA) → sorted index 1
+            if (lstIndex == 0) exitTokenIndex = 3;      // wKoKAIA at sorted index 3
+            else if (lstIndex == 1) exitTokenIndex = 0; // wGCKAIA at sorted index 0
+            else if (lstIndex == 2) exitTokenIndex = 2; // wstKLAY at sorted index 2
+            else exitTokenIndex = 1;                    // stKAIA at sorted index 1
         }
         
         bytes memory userData = abi.encode(0, lpAmount, exitTokenIndex);

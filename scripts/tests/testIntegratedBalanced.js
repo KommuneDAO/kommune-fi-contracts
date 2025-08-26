@@ -42,14 +42,14 @@ async function main() {
     const balance2 = await ethers.provider.getBalance(wallet2.address);
     const balance3 = await ethers.provider.getBalance(wallet3.address);
     
-    console.log(`  Wallet 1: ${ethers.formatEther(balance1)} KAIA (need 3.0 KAIA)`);
-    console.log(`  Wallet 2: ${ethers.formatEther(balance2)} KAIA (need 0.5 KAIA)`);
-    console.log(`  Wallet 3: ${ethers.formatEther(balance3)} KAIA (need 0.1 KAIA)`);
+    console.log(`  Wallet 1: ${ethers.formatEther(balance1)} KAIA (need 0.1 KAIA)`);
+    console.log(`  Wallet 2: ${ethers.formatEther(balance2)} KAIA (need 0.05 KAIA)`);
+    console.log(`  Wallet 3: ${ethers.formatEther(balance3)} KAIA (need 0.01 KAIA)`);
     
     // Check if balances are sufficient
-    const minBalance1 = ethers.parseEther("3.1"); // 3 KAIA + gas
-    const minBalance2 = ethers.parseEther("0.6"); // 0.5 KAIA + gas
-    const minBalance3 = ethers.parseEther("0.2"); // 0.1 KAIA + gas
+    const minBalance1 = ethers.parseEther("0.15"); // 0.1 KAIA + gas
+    const minBalance2 = ethers.parseEther("0.06"); // 0.05 KAIA + gas
+    const minBalance3 = ethers.parseEther("0.02"); // 0.01 KAIA + gas
     
     if (balance1 < minBalance1) {
         console.log("\n❌ ERROR: Wallet 1 has insufficient balance!");
@@ -119,47 +119,47 @@ async function main() {
     const shareVault3 = await ethers.getContractAt("ShareVault", deployments.shareVault, wallet3);
 
     // Wallet 1: Deposit using WKAIA (wrap first, then deposit)
-    console.log("1️⃣ Wallet 1 - Deposit with WKAIA (3 KAIA)...");
+    console.log("1️⃣ Wallet 1 - Deposit with WKAIA (0.1 KAIA)...");
     const wkaiaContract = await ethers.getContractAt("src/interfaces/IWKaia.sol:IWKaia", deployments.wkaia, wallet1);
     const wkaiaERC20 = await ethers.getContractAt("IERC20", deployments.wkaia, wallet1);
     
     // First wrap KAIA to WKAIA
     console.log("  🔄 Wrapping KAIA to WKAIA...");
-    let tx = await wkaiaContract.deposit({ value: ethers.parseEther("3") });
+    let tx = await wkaiaContract.deposit({ value: ethers.parseEther("0.1") });
     await tx.wait();
-    console.log("  ✅ Wrapped 3 KAIA to WKAIA");
+    console.log("  ✅ Wrapped 0.1 KAIA to WKAIA");
     
     // Then approve ShareVault to spend WKAIA (using IERC20 interface)
     console.log("  🔓 Approving ShareVault to spend WKAIA...");
-    tx = await wkaiaERC20.approve(deployments.shareVault, ethers.parseEther("3"));
+    tx = await wkaiaERC20.approve(deployments.shareVault, ethers.parseEther("0.1"));
     await tx.wait();
     console.log("  ✅ Approved ShareVault");
     
     // Finally deposit WKAIA
     console.log("  💰 Depositing WKAIA...");
-    tx = await shareVault1.deposit(ethers.parseEther("3"), wallet1.address);
+    tx = await shareVault1.deposit(ethers.parseEther("0.1"), wallet1.address);
     await tx.wait();
-    console.log("  ✅ Deposited 3 WKAIA");
+    console.log("  ✅ Deposited 0.1 WKAIA");
 
     // Wait for next block to avoid per-block deposit limit
     console.log("  ⏳ Waiting for next block...");
     await sleep(3000);
 
-    // Wallet 2: Medium deposit
-    console.log("\n2️⃣ Wallet 2 - Deposit with BALANCED (0.5 KAIA)...");
-    tx = await shareVault2.depositKAIA(wallet2.address, { value: ethers.parseEther("0.5") });
+    // Wallet 2: Deposit with KAIA
+    console.log("\n2️⃣ Wallet 2 - Deposit with KAIA (0.05 KAIA)...");
+    tx = await shareVault2.depositKAIA(wallet2.address, { value: ethers.parseEther("0.05") });
     await tx.wait();
-    console.log("  ✅ Deposited 0.5 KAIA");
+    console.log("  ✅ Deposited 0.05 KAIA");
 
     // Wait for next block to avoid per-block deposit limit
     console.log("  ⏳ Waiting for next block...");
     await sleep(3000);
 
-    // Wallet 3: Small deposit
-    console.log("\n3️⃣ Wallet 3 - Deposit with BALANCED (0.1 KAIA)...");
-    tx = await shareVault3.depositKAIA(wallet3.address, { value: ethers.parseEther("0.1") });
+    // Wallet 3: Deposit with KAIA
+    console.log("\n3️⃣ Wallet 3 - Deposit with KAIA (0.01 KAIA)...");
+    tx = await shareVault3.depositKAIA(wallet3.address, { value: ethers.parseEther("0.01") });
     await tx.wait();
-    console.log("  ✅ Deposited 0.1 KAIA");
+    console.log("  ✅ Deposited 0.01 KAIA");
 
     // Wait for LP operations
     console.log("\n⏳ Waiting for LP operations to complete...");
@@ -211,6 +211,7 @@ async function main() {
         tx = await shareVault2.withdraw(maxWithdraw2, wallet2.address, wallet2.address);
         await tx.wait();
         console.log(`  Wallet 2: Withdrew ${ethers.formatEther(maxWithdraw2)} WKAIA (100%)`);
+        console.log(`  📊 Note: 100% withdrawal should trigger 2 LST swaps in BALANCED mode too`);
     }
 
     // Wallet 3: 100% withdrawal
@@ -246,7 +247,16 @@ async function main() {
             // Remove liquidity (owner function)
             // Note: Using a small fixed amount for testing
             const testLpAmount = ethers.parseEther("0.01"); // Remove 0.01 BPT
-            tx = await vaultCore.removeLiquidity(lpToRemove.index, testLpAmount);
+            
+            // Check if we have enough LP tokens
+            const currentLpBalance = await vaultCore.lpBalance();
+            if (currentLpBalance < testLpAmount) {
+                console.log(`  ⚠️ Insufficient LP balance. Using available: ${ethers.formatEther(currentLpBalance)}`);
+                const adjustedAmount = currentLpBalance / 2n; // Use half of available
+                tx = await vaultCore.removeLiquidity(lpToRemove.index, adjustedAmount);
+            } else {
+                tx = await vaultCore.removeLiquidity(lpToRemove.index, testLpAmount);
+            }
             await tx.wait();
             console.log(`  ✅ Liquidity removed successfully`);
 

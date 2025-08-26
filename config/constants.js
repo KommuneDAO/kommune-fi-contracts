@@ -39,7 +39,7 @@ const contracts = {
   },
   treasury: {
     [ChainId.KAIA]: "0x0d7Aea5B64cABC760540a298eefde492f1740d5D",
-    [ChainId.KAIROS]: "0xDdb24eCaF1cCeF3dd3BcF2e2b93A231e809B89B0",
+    [ChainId.KAIROS]: "0xdc926E34E73292cD7c48c6fD7375af7D93435D36", // wallet1 for testing
   },
 };
 

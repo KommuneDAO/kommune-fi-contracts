@@ -71,8 +71,8 @@ async function main() {
         }
     });
     
-    // Default investRatio: 90% for maximum user returns
-    const investRatio = 9000; // 90% to maximize investment returns
+    // Default investRatio: 100% for maximum investment in LSTs
+    const investRatio = 10000; // 100% to LSTs (no WKAIA buffer)
     
     const vaultCore = await upgrades.deployProxy(
         VaultCore,
@@ -92,7 +92,7 @@ async function main() {
     await vaultCore.waitForDeployment();
     newDeployments.vaultCore = await vaultCore.getAddress();
     console.log("   ✅ VaultCore deployed at:", newDeployments.vaultCore);
-    console.log("   📊 Investment Ratio: 90% (maximizing user returns)");
+    console.log("   📊 Investment Ratio: 100% (all funds to LSTs, no buffer)");
     
     // 5. Deploy ShareVault (UUPS Proxy) 
     console.log("\n5️⃣ Deploying ShareVault (UUPS proxy)...");
@@ -157,12 +157,12 @@ async function main() {
     // 9. Set investment ratios
     console.log("\n9️⃣ Setting investment ratios...");
     await vaultCore.setInvestmentRatios(
-        investRatio,  // All 90% to stable (LST staking)
+        investRatio,  // All 100% to stable (LST staking)
         0,            // 0% to balanced
         0             // 0% to aggressive
     );
     console.log("   ✅ Investment ratios configured:");
-    console.log("      - Stable (LST): 90%");
+    console.log("      - Stable (LST): 100%");
     console.log("      - Balanced: 0%");
     console.log("      - Aggressive: 0%");
     
@@ -231,9 +231,9 @@ async function main() {
     console.log("  ClaimManager:", newDeployments.claimManager);
     console.log("  WKAIA:", newDeployments.wkaia);
     console.log("\n📊 Investment Profile: STABLE");
-    console.log("  Total Investment: 90%");
-    console.log("  Stable Strategy: 90% (LST staking)");
-    console.log("  Liquidity Buffer: 10%");
+    console.log("  Total Investment: 100%");
+    console.log("  Stable Strategy: 100% (LST staking)");
+    console.log("  Liquidity Buffer: 0%");
     console.log("\n💡 Next Steps:");
     console.log("  1. Run integration tests: npx hardhat run scripts/testIntegrated.js --network", networkName);
     console.log("  2. Change profile if needed using setInvestmentRatios()");
