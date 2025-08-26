@@ -229,7 +229,7 @@ await shareVault.withdraw(withdrawWKAIA, user, user);
 
 ### Core Contracts
 - `src/ShareVault.sol` - ERC-4626 share management (12.23 KB)
-- `src/VaultCore.sol` - Asset management logic with unstake/claim support (10.17 KB)
+- `src/VaultCore.sol` - Asset management logic with LP support (~20 KB)
 - `src/SwapContract.sol` - ✅ FINALIZED - Handles Balancer swaps (9.26 KB)
 - `src/ClaimManager.sol` - Handles unstake/claim operations via delegatecall
 
@@ -263,8 +263,8 @@ await shareVault.withdraw(withdrawWKAIA, user, user);
 
 ### Scripts Organization
 - `scripts/` - Essential deployment and configuration scripts
-  - `deployFreshStable.js` - Deploy fresh V2 with STABLE profile (90% LST)
-  - `deployFreshBalanced.js` - Deploy fresh V2 with BALANCED profile (45% LST remains + 45% to LP)
+  - `deployFreshStable.js` - Deploy fresh V2 with STABLE profile (100% LST, no WKAIA buffer)
+  - `deployFreshBalanced.js` - Deploy fresh V2 with BALANCED profile (50% LST remains + 50% to LP)
   - `upgradeAll.js` - Upgrade all V2 contracts (supports PROFILE env var)
   - `upgradeShareVault.js` - Upgrade ShareVault only (supports PROFILE env var)
   - `upgradeVaultCore.js` - Upgrade VaultCore only (supports PROFILE env var)
@@ -837,3 +837,35 @@ uint256 targetWKAIA = (needed * (10000 + slippage)) / 10000;
 - **Unified upgrade scripts with PROFILE environment variable support (2025-08-23)**
 - **Integration tests separated by mode - testIntegratedStable.js and testIntegratedBalanced.js (2025-08-23)**
 - **All tests updated with 3 KAIA WKAIA deposits for sufficient liquidity buffer (2025-08-23)**
+- **Sequential Swap with APY-based ordering implemented (2025-08-25)**
+- **SwapContract asset recovery functions added for stranded tokens (2025-08-25)**
+- **investRatio set to 100% for maximum LST investment (2025-08-26)**
+- **Balancer exitPool exitTokenIndex fixed - uses sorted non-BPT token indices (2025-08-26)**
+
+### Critical Lessons Learned (2025-08-26)
+
+#### 1. Balancer Pool Token Ordering
+**Problem**: BAL#100 (OUT_OF_BOUNDS) error in removeLiquidity
+**Root Cause**: exitTokenIndex must refer to sorted non-BPT token indices
+**Solution**: 
+- Balancer internally sorts tokens alphabetically (excluding BPT)
+- exitTokenIndex refers to position in sorted array after BPT exclusion
+- Testnet order: [wGCKAIA(0), stKAIA(1), wstKLAY(2), wKoKAIA(3)]
+
+#### 2. Compilation Cache Issues
+**Problem**: Fresh deployments not reflecting code changes
+**Root Cause**: Hardhat artifacts/cache not properly cleared
+**Solution**: Always run `rm -rf artifacts cache && npx hardhat compile` when changes aren't reflected
+
+#### 3. Investment Ratio Configuration
+**Current Settings**:
+- STABLE: investRatio = 100% (all to LSTs, no WKAIA buffer)
+- BALANCED: investRatio = 100%, balancedRatio = 50% (50% LST, 50% LP)
+- Multi-LST swaps triggered for all withdrawals due to 100% investment
+
+#### 4. Test Environment Setup
+**Standardized Deposit Amounts**:
+- Wallet 1: 0.1 KAIA
+- Wallet 2: 0.05 KAIA  
+- Wallet 3: 0.01 KAIA
+- Hardhat timeout: 30 minutes (for unstake/claim operations)
