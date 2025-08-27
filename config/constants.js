@@ -38,7 +38,7 @@ const contracts = {
     [ChainId.KAIROS]: "0x1c9074AA147648567015287B0d4185Cb4E04F86d",
   },
   treasury: {
-    [ChainId.KAIA]: "0x0d7Aea5B64cABC760540a298eefde492f1740d5D",
+    [ChainId.KAIA]: "0xfbf389be9ef4ced3a95bdc2a6fc94b81c8e374a3", // Kommune DAO
     [ChainId.KAIROS]: "0xdc926E34E73292cD7c48c6fD7375af7D93435D36", // wallet1 for testing
   },
 };
