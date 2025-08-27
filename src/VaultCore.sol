@@ -469,9 +469,11 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
         TokenInfo memory info = tokensInfo[index];
         
         if (index == 3) {
-            // stKAIA - use stake() function
+            // stKAIA - use stake(address) function with active node address
+            // This address is from a successful mainnet transaction
+            address activeNode = 0x9fA8A1dE3295A286b5e51dDEd41D08c417dF45A8;
             (bool success,) = info.handler.call{value: amount}(
-                abi.encodeWithSignature("stake()")
+                abi.encodeWithSignature("stake(address)", activeNode)
             );
             if (!success) revert("E8");
         } else {
