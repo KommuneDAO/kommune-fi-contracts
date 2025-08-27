@@ -869,3 +869,32 @@ uint256 targetWKAIA = (needed * (10000 + slippage)) / 10000;
 - Wallet 2: 0.05 KAIA  
 - Wallet 3: 0.01 KAIA
 - Hardhat timeout: 30 minutes (for unstake/claim operations)
+
+### Future Upgrade Considerations (2025-08-27)
+
+#### 1. LP Removal Optimization
+**Current Implementation**: LP removal decision made before Sequential Swap attempts
+**Behavior**: 
+- Calculates total LST balance across all 4 tokens
+- If total < needed, removes LP immediately (with 20% safety margin)
+- Then proceeds with Sequential Swap
+
+**Potential Optimization**:
+```solidity
+// Proposed flow:
+// 1. Try Sequential Swap first with available LSTs
+// 2. Only if still insufficient, remove LP for remaining amount
+// 3. Continue Sequential Swap with newly available LSTs
+```
+
+**Benefits of Future Optimization**:
+- Minimize unnecessary LP removal (preserve LP yield)
+- Reduce gas costs (LP removal costs ~1M gas)
+- More efficient capital utilization
+
+**Trade-offs**:
+- Current approach is more conservative and predictable
+- Ensures sufficient liquidity upfront
+- Simpler logic with less complexity
+
+**Recommendation**: Keep current implementation for stability. Consider optimization after 3-6 months of mainnet operation data.

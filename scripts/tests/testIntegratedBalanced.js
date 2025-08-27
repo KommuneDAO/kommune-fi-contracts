@@ -208,15 +208,14 @@ async function main() {
     // Test withdrawals with balanced profile
     console.log("\n📤 Testing Withdrawals (BALANCED):");
 
-    // Wallet 2: 30% withdrawal (reduced from 100% to test LP limitation)
+    // Wallet 2: 100% withdrawal (testing automatic LP removal)
     const maxWithdraw2 = await shareVault.maxWithdraw(wallet2.address);
-    const withdrawAmount2 = (maxWithdraw2 * 30n) / 100n; // Only 30% of max
-    if (withdrawAmount2 > 0n) {
-        console.log(`  Wallet 2: Withdrawing ${ethers.formatEther(withdrawAmount2)} WKAIA (30% of max)...`);
-        tx = await shareVault2.withdraw(withdrawAmount2, wallet2.address, wallet2.address);
+    if (maxWithdraw2 > 0n) {
+        console.log(`  Wallet 2: Withdrawing ${ethers.formatEther(maxWithdraw2)} WKAIA (100%)...`);
+        tx = await shareVault2.withdraw(maxWithdraw2, wallet2.address, wallet2.address);
         await tx.wait();
-        console.log(`  ✅ Wallet 2: Successfully withdrew 30%`);
-        console.log(`  📊 Note: 30% withdrawal should work with available LST outside LP`);
+        console.log(`  ✅ Wallet 2: Successfully withdrew 100%`);
+        console.log(`  📊 Note: Automatic LP removal should trigger if needed`);
     }
 
     // Wallet 3: 100% withdrawal (small amount should work)

@@ -1,0 +1,111 @@
+╔══════════════════════════════════════════════════════════════╗
+║     KOMMUNEFI V2 - BALANCED MODE INTEGRATED TEST            ║
+╚══════════════════════════════════════════════════════════════╝
+
+📋 Test Plan:
+  Network: kaia
+  ChainId: 8217n
+  1. Deploy fresh BALANCED contracts
+  2. Test with 3 wallets - deposit & withdraw
+  3. Verify add liquidity success
+  4. Verify remove liquidity fund recovery
+
+💰 Checking wallet balances...
+  Wallet 1: 0.505886657952991273 KAIA (need 0.1 KAIA)
+  Wallet 2: 0.575647692140908097 KAIA (need 0.05 KAIA)
+  Wallet 3: 1.484773171153802611 KAIA (need 0.01 KAIA)
+✅ All wallets have sufficient balance
+
+╔══════════════════════════════════════════════════════════════╗
+║   STEP 1: DEPLOY FRESH CONTRACTS                            ║
+╚══════════════════════════════════════════════════════════════╝
+
+📦 Deploying fresh contracts for BALANCED test...
+
+✅ Contracts deployed:
+  ShareVault: 0xF4C64918dbbdd7a17327C0Ea1aA625A9f3Ed2b9b
+  VaultCore: 0x95A257399BeB3D2c959a1E64d35DD872Fdedb2dA
+  SwapContract: 0x015da9B47A34F98C4efC70D9898e4E0913FF7e4d
+  Profile: BALANCED (already configured)
+
+╔══════════════════════════════════════════════════════════════╗
+║   STEP 2: 3-WALLET DEPOSIT/WITHDRAW TEST (BALANCED)        ║
+╚══════════════════════════════════════════════════════════════╝
+
+1️⃣ Wallet 1 - Deposit with WKAIA (0.1 KAIA)...
+  🔄 Wrapping KAIA to WKAIA...
+  ✅ Wrapped 0.1 KAIA to WKAIA
+  🔓 Approving ShareVault to spend WKAIA...
+  ✅ Approved ShareVault
+  💰 Depositing WKAIA...
+  ✅ Deposited 0.1 WKAIA
+  ⏳ Waiting for next block...
+
+2️⃣ Wallet 2 - Deposit with KAIA (0.05 KAIA)...
+  ✅ Deposited 0.05 KAIA
+  ⏳ Waiting for next block...
+
+3️⃣ Wallet 3 - Deposit with KAIA (0.01 KAIA)...
+  ✅ Deposited 0.01 KAIA
+
+⏳ Waiting for LP operations to complete...
+
+╔══════════════════════════════════════════════════════════════╗
+║   STEP 3: VERIFY ADD LIQUIDITY SUCCESS                      ║
+╚══════════════════════════════════════════════════════════════╝
+
+🔍 Checking LP Token Creation...
+  LST 0: LP Value = 0.087004366550246102 tokens
+  LST 1: LP Value = 0.057963170760378682 tokens
+  LST 2: LP Value = 0.043838138659469532 tokens
+  LST 3: LP Value = 0.147314853556324214 tokens
+
+✅ Add Liquidity Success!
+  Total LP Positions: 4
+  Total LP Value: 0.33612052952641853 LST tokens
+
+📤 Testing Withdrawals (BALANCED):
+  Wallet 2: Withdrawing 0.012644498313073058 WKAIA (30% of max)...
+  ✅ Wallet 2: Successfully withdrew 30%
+  📊 Note: 30% withdrawal should work with available LST outside LP
+  Wallet 3: Withdrawing 0.008155501880869646 WKAIA (100%)...
+  ✅ Wallet 3: Successfully withdrew 100%
+
+╔══════════════════════════════════════════════════════════════╗
+║   STEP 4: VERIFY REMOVE LIQUIDITY FUND RECOVERY             ║
+╚══════════════════════════════════════════════════════════════╝
+
+💧 Testing Remove Liquidity...
+
+  Removing liquidity from LST 0...
+  LP value: 0.087004366550246102
+  Current total LP balance: 0.535935614503884379 BPT
+  Amount to remove: 0.01 BPT
+  Calling removeLiquidity with index 0...
+  ✅ Liquidity removed successfully
+  LST recovered: 0.008853775572743725
+  Remaining LP value: 0.085380947069784457
+
+✅ Fund Recovery Verified!
+  LP tokens can be converted back to LST for withdrawals
+
+╔══════════════════════════════════════════════════════════════╗
+║                    TEST SUMMARY                             ║
+╚══════════════════════════════════════════════════════════════╝
+
+✅ Completed Test Steps:
+  1. Deploy fresh BALANCED contracts ✓
+  2. 3-wallet deposit/withdraw test ✓
+  3. Add liquidity verification ✓
+  4. Remove liquidity fund recovery ✓
+
+📊 Final Stats:
+  Total Assets: 0.108195702098757493 WKAIA
+  Investment Ratio: 100%
+  Mode: BALANCED (LST staking + LP pools)
+
+📊 LP Positions Summary:
+  Active LP positions: 4
+  Total LP value: 0.33612052952641853 LST tokens
+
+🎉 BALANCED MODE TEST COMPLETED SUCCESSFULLY!

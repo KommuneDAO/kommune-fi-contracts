@@ -329,6 +329,51 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
             // Need to swap LSTs to WKAIA
             uint256 needed = amount - wkaiaBalance;
             
+            // Check if we need to remove liquidity from LP
+            if (needed > 0 && lpBalance > 0) {
+                // Calculate total available LST balance
+                uint256 totalAvailableLST = 0;
+                for (uint256 i = 0; i < 4; i++) {
+                    totalAvailableLST += IERC20(tokensInfo[i].tokenA).balanceOf(address(this));
+                }
+                
+                // If available LST is not enough, remove from LP
+                if (totalAvailableLST < needed) {
+                    uint256 shortfall = needed - totalAvailableLST;
+                    
+                    // Add 20% safety margin
+                    uint256 lpValueNeeded = (shortfall * 120) / 100;
+                    
+                    // Calculate LP tokens to remove
+                    uint256 totalLPValue = _calculateLPTokenValue(0, lpBalance);
+                    uint256 lpToRemove = 0;
+                    
+                    if (totalLPValue > 0) {
+                        lpToRemove = (lpValueNeeded * lpBalance) / totalLPValue;
+                        
+                        // Cap at available LP balance
+                        if (lpToRemove > lpBalance) {
+                            lpToRemove = lpBalance;
+                        }
+                        
+                        // Find LST with lowest APY
+                        uint256 lowestAPYIndex = 0;
+                        uint256 lowestAPY = lstAPY[0];
+                        for (uint256 i = 1; i < 4; i++) {
+                            if (lstAPY[i] < lowestAPY) {
+                                lowestAPY = lstAPY[i];
+                                lowestAPYIndex = i;
+                            }
+                        }
+                        
+                        // Remove liquidity to the LST with lowest APY
+                        if (lpToRemove > 0) {
+                            _removeLiquidityInternal(lowestAPYIndex, lpToRemove);
+                        }
+                    }
+                }
+            }
+            
             // Create array of indices sorted by APY (lowest first)
             uint256[4] memory sortedIndices;
             uint256[4] memory apyValues;
@@ -469,12 +514,22 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
         TokenInfo memory info = tokensInfo[index];
         
         if (index == 3) {
-            // stKAIA - use stake(address) function with active node address
-            // This address is from a successful mainnet transaction
-            address activeNode = 0x9fA8A1dE3295A286b5e51dDEd41D08c417dF45A8;
-            (bool success,) = info.handler.call{value: amount}(
-                abi.encodeWithSignature("stake(address)", activeNode)
-            );
+            // stKAIA - different function signatures for mainnet and testnet
+            bool success;
+            
+            if (isMainnet) {
+                // Mainnet: use stake(address) with active node address
+                address activeNode = 0x9fA8A1dE3295A286b5e51dDEd41D08c417dF45A8;
+                (success,) = info.handler.call{value: amount}(
+                    abi.encodeWithSignature("stake(address)", activeNode)
+                );
+            } else {
+                // Testnet: use stake() without parameters
+                (success,) = info.handler.call{value: amount}(
+                    abi.encodeWithSignature("stake()")
+                );
+            }
+            
             if (!success) revert("E8");
         } else {
             // Other protocols - use stake() and wrap
@@ -883,15 +938,15 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
     }
     
     /**
-     * @dev Remove liquidity from Balancer pool (owner only)
+     * @dev Internal function to remove liquidity from Balancer pool
      * @param lstIndex Index of the LST (0-3)
      * @param lpAmount Amount of LP tokens to remove
      */
-    function removeLiquidity(uint256 lstIndex, uint256 lpAmount) external onlyOwner {
+    function _removeLiquidityInternal(uint256 lstIndex, uint256 lpAmount) internal {
         if (lstIndex >= 4) revert("E3");
-        if (lpAmount == 0) revert("E2");
+        if (lpAmount == 0) return;
         // All BPT is stored at index 0 since all LSTs share the same pool
-        if (lpBalance < lpAmount) revert("E22");
+        if (lpBalance < lpAmount) lpAmount = lpBalance;
         
         // Use same assets array as joinPool
         uint256 numTokens = isMainnet ? 6 : 5;
@@ -980,6 +1035,20 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
         lpBalance -= lpAmount;
         
         emit LiquidityRemoved(lstIndex, lpAmount, totalReceived);
+    }
+    
+    /**
+     * @dev Remove liquidity from Balancer pool (owner only)
+     * External function for owner to manually remove liquidity
+     * @param lstIndex Index of the LST (0-3)
+     * @param lpAmount Amount of LP tokens to remove
+     */
+    function removeLiquidity(uint256 lstIndex, uint256 lpAmount) external onlyOwner {
+        if (lstIndex >= 4) revert("E3");
+        if (lpAmount == 0) revert("E2");
+        if (lpBalance < lpAmount) revert("E22");
+        
+        _removeLiquidityInternal(lstIndex, lpAmount);
     }
     
     /**

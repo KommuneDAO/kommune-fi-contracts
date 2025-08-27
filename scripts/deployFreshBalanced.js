@@ -148,10 +148,11 @@ async function main() {
     
     // 8. Set initial APY - Actual production values
     console.log("\n8️⃣ Setting initial APY...");
+    const isMainnet = chainId === 8217n;
     await vaultCore.setAPY(0, 676); // wKoKAIA: 7.09%
     await vaultCore.setAPY(1, 556); // wGCKAIA: 5.56%
     await vaultCore.setAPY(2, 700); // wstKLAY: 7.09%
-    await vaultCore.setAPY(3, 550); // stKAIA: 5.50%
+    await vaultCore.setAPY(3, 550); // stKAIA: 5.50% (now works on testnet with address(this))
     console.log("   ✅ APY set to actual production values");
     
     // 9. Set investment ratios FOR BALANCED PROFILE
@@ -211,7 +212,7 @@ async function main() {
     const apy2 = await vaultCore.lstAPY(2);
     const apy3 = await vaultCore.lstAPY(3);
     console.log("   APY configured:", 
-        apy0 === 709n && apy1 === 556n && apy2 === 709n && apy3 === 550n ? "✅" : "❌");
+        apy0 === 676n && apy1 === 556n && apy2 === 700n && apy3 === 550n ? "✅" : "❌");
     
     // Check investment ratios directly from public variables
     const investRatioCheck = await vaultCore.investRatio();
