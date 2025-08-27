@@ -53,7 +53,7 @@ async function main() {
     console.log("  stKAIA: ", currentAPYs[3].toString(), `(${Number(currentAPYs[3]) / 100}%)`);
     
     // Set new APY values - Actual production values
-    const newAPYs = [709, 556, 709, 550]; // 7.09%, 5.56%, 7.09%, 5.50%
+    const newAPYs = [676, 556, 700, 550]; // 7.09%, 5.56%, 7.09%, 5.50%
     console.log("\nSetting new APY values:");
     console.log("  wKoKAIA: 709 (7.09%)");
     console.log("  wGCKAIA: 556 (5.56%)");

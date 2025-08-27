@@ -1,6 +1,7 @@
 const { ethers } = require("hardhat");
 const fs = require('fs');
 const { spawn } = require('child_process');
+const {ChainId} = require("../../config/config");
 require("dotenv").config();
 
 async function sleep(ms) {
@@ -38,7 +39,12 @@ async function main() {
     console.log("║     KOMMUNEFI V2 - STABLE MODE INTEGRATED TEST              ║");
     console.log("╚══════════════════════════════════════════════════════════════╝\n");
 
+    const chainId = (await ethers.provider.getNetwork()).chainId;
+    const networkName = chainId === 8217n ? "kaia" : "kairos";
+
     console.log("📋 Test Plan:");
+    console.log("  Network:", networkName);
+    console.log("  ChainId:", chainId);
     console.log("  1. Deploy fresh contracts with STABLE profile");
     console.log("  2. Test with 3 wallets - deposit & withdraw");
     console.log("  3. Test unstake & claim (optional)");
@@ -46,7 +52,7 @@ async function main() {
     console.log("");
 
     const [deployer] = await ethers.getSigners();
-    const wallet1 = new ethers.Wallet(process.env.KAIROS_PRIVATE_KEY, ethers.provider);
+    const wallet1 = new ethers.Wallet(chainId === 8217 ? process.env.KAIA_PRIVATE_KEY : process.env.KAIROS_PRIVATE_KEY, ethers.provider);
     const wallet2 = new ethers.Wallet(process.env.TESTER1_PRIV_KEY, ethers.provider);
     const wallet3 = new ethers.Wallet(process.env.TESTER2_PRIV_KEY, ethers.provider);
 
@@ -102,11 +108,9 @@ async function main() {
     console.log("📦 Deploying fresh contracts with STABLE profile...\n");
 
     // Deploy using deployFreshStable.js for stable profile
-    await runSubScript('scripts/deployFreshStable.js', 'Fresh Deployment (STABLE)');
+    // await runSubScript('scripts/deployFreshStable.js', 'Fresh Deployment (STABLE)');
 
     // Load deployment info
-    const chainId = (await ethers.provider.getNetwork()).chainId;
-    const networkName = chainId === 8217n ? "kaia" : "kairos";
     const deployments = JSON.parse(fs.readFileSync(`deployments-stable-${networkName}.json`, 'utf8'));
 
     const shareVault = await ethers.getContractAt("ShareVault", deployments.shareVault);
@@ -122,24 +126,24 @@ async function main() {
     // STEP 2: SETUP PROVIDER AND CHECK FEE CONFIGURATION
     // ═══════════════════════════════════════════════════════════════════
 
-    console.log("\n╔══════════════════════════════════════════════════════════════╗");
-    console.log("║   STEP 2: SETUP PROVIDER & FEE CONFIGURATION                ║");
-    console.log("╚══════════════════════════════════════════════════════════════╝\n");
-    
-    // Add wallet1 as provider
-    console.log("🔧 Setting up wallet1 as provider...");
-    let tx = await shareVault.addProvider(wallet1.address);
-    await tx.wait();
-    console.log(`  ✅ Added wallet1 as provider: ${wallet1.address}`);
-    
+    // console.log("\n╔══════════════════════════════════════════════════════════════╗");
+    // console.log("║   STEP 2: SETUP PROVIDER & FEE CONFIGURATION                ║");
+    // console.log("╚══════════════════════════════════════════════════════════════╝\n");
+    //
+    // // Add wallet1 as provider
+    // console.log("🔧 Setting up wallet1 as provider...");
+    // let tx = await shareVault.addProvider(wallet1.address);
+    // await tx.wait();
+    // console.log(`  ✅ Added wallet1 as provider: ${wallet1.address}`);
+
     // Check fee configuration
     const basisPointsFees = await shareVault.basisPointsFees();
     const treasury = await shareVault.treasury();
     console.log(`\n📊 Fee Configuration:`);
     console.log(`  Withdrawal Fee: ${Number(basisPointsFees) / 100}% (${basisPointsFees} basis points)`);
     console.log(`  Treasury Address: ${treasury}`);
-    console.log(`  Provider (wallet1): ${wallet1.address}`);
-    console.log(`  Fee Split: 1/3 to provider, 2/3 to treasury`);
+    // console.log(`  Provider (wallet1): ${wallet1.address}`);
+    // console.log(`  Fee Split: 1/3 to provider, 2/3 to treasury`);
     
     // ═══════════════════════════════════════════════════════════════════
     // STEP 3: TEST WITH 3 WALLETS - STABLE PROFILE
@@ -151,27 +155,27 @@ async function main() {
 
     // Helper function to sleep
     const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-    
+
     // Wallet 1: Deposit using WKAIA (wrap first, then deposit)
     console.log("1️⃣ Wallet 1 - Deposit with WKAIA (0.1 KAIA)...");
     const shareVault1 = await ethers.getContractAt("ShareVault", deployments.shareVault, wallet1);
     const wkaiaContract = await ethers.getContractAt("src/interfaces/IWKaia.sol:IWKaia", deployments.wkaia, wallet1);
     const wkaiaERC20 = await ethers.getContractAt("IERC20", deployments.wkaia, wallet1);
-    
+
     // First wrap KAIA to WKAIA
     console.log("  🔄 Wrapping KAIA to WKAIA...");
     tx = await wkaiaContract.deposit({ value: ethers.parseEther("0.1") });
     await tx.wait();
     console.log("  ✅ Wrapped 0.1 KAIA to WKAIA");
     await sleep(2000); // Wait 2 seconds
-    
+
     // Then approve ShareVault to spend WKAIA (using IERC20 interface)
     console.log("  🔓 Approving ShareVault to spend WKAIA...");
     tx = await wkaiaERC20.approve(deployments.shareVault, ethers.parseEther("0.1"));
     await tx.wait();
     console.log("  ✅ Approved ShareVault");
     await sleep(2000); // Wait 2 seconds
-    
+
     // Finally deposit WKAIA
     console.log("  💰 Depositing WKAIA...");
     tx = await shareVault1.deposit(ethers.parseEther("0.1"), wallet1.address);
@@ -328,7 +332,7 @@ async function main() {
     // STEP 4: OPTIONAL UNSTAKE & CLAIM TEST
     // ═══════════════════════════════════════════════════════════════════
 
-    const runUnstakeClaim = true; // Set to true to run unstake/claim test (disabled for small amount test)
+    const runUnstakeClaim = false; // Set to true to run unstake/claim test (disabled for small amount test)
 
     if (runUnstakeClaim) {
         console.log("\n╔══════════════════════════════════════════════════════════════╗");

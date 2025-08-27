@@ -148,9 +148,9 @@ async function main() {
     
     // 8. Set initial APY - Actual production values
     console.log("\n8️⃣ Setting initial APY...");
-    await vaultCore.setAPY(0, 709); // wKoKAIA: 7.09%
+    await vaultCore.setAPY(0, 676); // wKoKAIA: 7.09%
     await vaultCore.setAPY(1, 556); // wGCKAIA: 5.56%
-    await vaultCore.setAPY(2, 709); // wstKLAY: 7.09%
+    await vaultCore.setAPY(2, 700); // wstKLAY: 7.09%
     await vaultCore.setAPY(3, 550); // stKAIA: 5.50%
     console.log("   ✅ APY set to actual production values");
     

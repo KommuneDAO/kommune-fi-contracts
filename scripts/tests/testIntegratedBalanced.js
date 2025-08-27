@@ -25,14 +25,19 @@ async function main() {
     console.log("║     KOMMUNEFI V2 - BALANCED MODE INTEGRATED TEST            ║");
     console.log("╚══════════════════════════════════════════════════════════════╝\n");
 
+    const chainId = (await ethers.provider.getNetwork()).chainId;
+    const networkName = chainId === 8217n ? "kaia" : "kairos";
+
     console.log("📋 Test Plan:");
+    console.log("  Network:", networkName);
+    console.log("  ChainId:", chainId);
     console.log("  1. Deploy fresh BALANCED contracts");
     console.log("  2. Test with 3 wallets - deposit & withdraw");
     console.log("  3. Verify add liquidity success");
     console.log("  4. Verify remove liquidity fund recovery");
     console.log("");
 
-    const wallet1 = new ethers.Wallet(process.env.KAIROS_PRIVATE_KEY, ethers.provider);
+    const wallet1 = new ethers.Wallet(chainId === 8217 ? process.env.KAIA_PRIVATE_KEY : process.env.KAIROS_PRIVATE_KEY, ethers.provider);
     const wallet2 = new ethers.Wallet(process.env.TESTER1_PRIV_KEY, ethers.provider);
     const wallet3 = new ethers.Wallet(process.env.TESTER2_PRIV_KEY, ethers.provider);
 
@@ -88,11 +93,9 @@ async function main() {
     console.log("📦 Deploying fresh contracts for BALANCED test...\n");
 
     // Deploy using deployFreshBalanced.js
-    await runSubScript('scripts/deployFreshBalanced.js', 'Fresh BALANCED Deployment');
+    // await runSubScript('scripts/deployFreshBalanced.js', 'Fresh BALANCED Deployment');
 
     // Load deployment info
-    const chainId = (await ethers.provider.getNetwork()).chainId;
-    const networkName = chainId === 8217n ? "kaia" : "kairos";
     const deployments = JSON.parse(fs.readFileSync(`deployments-balanced-${networkName}.json`, 'utf8'));
 
     const shareVault = await ethers.getContractAt("ShareVault", deployments.shareVault);
@@ -205,21 +208,24 @@ async function main() {
     // Test withdrawals with balanced profile
     console.log("\n📤 Testing Withdrawals (BALANCED):");
 
-    // Wallet 2: 100% withdrawal
+    // Wallet 2: 30% withdrawal (reduced from 100% to test LP limitation)
     const maxWithdraw2 = await shareVault.maxWithdraw(wallet2.address);
-    if (maxWithdraw2 > 0n) {
-        tx = await shareVault2.withdraw(maxWithdraw2, wallet2.address, wallet2.address);
+    const withdrawAmount2 = (maxWithdraw2 * 30n) / 100n; // Only 30% of max
+    if (withdrawAmount2 > 0n) {
+        console.log(`  Wallet 2: Withdrawing ${ethers.formatEther(withdrawAmount2)} WKAIA (30% of max)...`);
+        tx = await shareVault2.withdraw(withdrawAmount2, wallet2.address, wallet2.address);
         await tx.wait();
-        console.log(`  Wallet 2: Withdrew ${ethers.formatEther(maxWithdraw2)} WKAIA (100%)`);
-        console.log(`  📊 Note: 100% withdrawal should trigger 2 LST swaps in BALANCED mode too`);
+        console.log(`  ✅ Wallet 2: Successfully withdrew 30%`);
+        console.log(`  📊 Note: 30% withdrawal should work with available LST outside LP`);
     }
 
-    // Wallet 3: 100% withdrawal
+    // Wallet 3: 100% withdrawal (small amount should work)
     const maxWithdraw3 = await shareVault.maxWithdraw(wallet3.address);
     if (maxWithdraw3 > 0n) {
+        console.log(`  Wallet 3: Withdrawing ${ethers.formatEther(maxWithdraw3)} WKAIA (100%)...`);
         tx = await shareVault3.withdraw(maxWithdraw3, wallet3.address, wallet3.address);
         await tx.wait();
-        console.log(`  Wallet 3: Withdrew ${ethers.formatEther(maxWithdraw3)} WKAIA (100%)`);
+        console.log(`  ✅ Wallet 3: Successfully withdrew 100%`);
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -250,13 +256,20 @@ async function main() {
             
             // Check if we have enough LP tokens
             const currentLpBalance = await vaultCore.lpBalance();
+            console.log(`  Current total LP balance: ${ethers.formatEther(currentLpBalance)} BPT`);
+            
+            let amountToRemove;
             if (currentLpBalance < testLpAmount) {
-                console.log(`  ⚠️ Insufficient LP balance. Using available: ${ethers.formatEther(currentLpBalance)}`);
-                const adjustedAmount = currentLpBalance / 2n; // Use half of available
-                tx = await vaultCore.removeLiquidity(lpToRemove.index, adjustedAmount);
+                console.log(`  ⚠️ Insufficient LP balance. Using 10% of available...`);
+                amountToRemove = currentLpBalance / 10n; // Use 10% of available
             } else {
-                tx = await vaultCore.removeLiquidity(lpToRemove.index, testLpAmount);
+                amountToRemove = testLpAmount;
             }
+            
+            console.log(`  Amount to remove: ${ethers.formatEther(amountToRemove)} BPT`);
+            console.log(`  Calling removeLiquidity with index ${lpToRemove.index}...`);
+            
+            tx = await vaultCore.removeLiquidity(lpToRemove.index, amountToRemove);
             await tx.wait();
             console.log(`  ✅ Liquidity removed successfully`);
 

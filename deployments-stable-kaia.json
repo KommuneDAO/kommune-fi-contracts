@@ -1,0 +1,19 @@
+{
+  "claimManager": "0x30d2850364af9b357cf7557078bf5B7B43ee9f8f",
+  "swapContract": "0xAB0330C58760A85Bc40c296C4415b2fD04F9128B",
+  "vaultCore": "0x06ce7e66D219a261eDa4F15Fd503F2Ac2B81Afc9",
+  "shareVault": "0x86799f0B252822dE36c8D8384d443355E4d478AE",
+  "wkaia": "0x19Aac5f612f524B754CA7e7c41cbFa2E981A4432",
+  "balancerVault": "0xbF1f3C783C8f6f4582c0a0508f2790b4E2C2E581",
+  "chainId": "8217",
+  "network": "kaia",
+  "deployedAt": "2025-08-26T22:51:02.275Z",
+  "profile": "stable",
+  "configuration": {
+    "investRatio": 10000,
+    "stableRatio": 10000,
+    "balancedRatio": 0,
+    "aggressiveRatio": 0
+  },
+  "lastVaultCoreUpgrade": "2025-08-27T00:03:27.500Z"
+}

@@ -21,7 +21,7 @@ async function main() {
     console.log("║          UNSTAKE/CLAIM TEST (wKoKAIA ONLY)                  ║");
     console.log("╚══════════════════════════════════════════════════════════════╝\n");
     
-    const owner = new ethers.Wallet(process.env.KAIROS_PRIVATE_KEY, ethers.provider);
+    const owner = new ethers.Wallet(chainId === 8217 ? process.env.KAIA_PRIVATE_KEY : process.env.KAIROS_PRIVATE_KEY, ethers.provider);
     
     const chainId = (await ethers.provider.getNetwork()).chainId;
     const networkName = chainId === 8217n ? "kaia" : "kairos";

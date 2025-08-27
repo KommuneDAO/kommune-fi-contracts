@@ -14,7 +14,7 @@ const chainId = networkName === "kaia" ? 8217 : 1001;
 console.log("!! start deploying to : ", networkName, chainId);
 
 const provider = new ethers.JsonRpcProvider(RPC_URLS[chainId]);
-const wallet = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
+const wallet = new ethers.Wallet(chainId === 8217 ? process.env.KAIA_PRIVATE_KEY : process.env.KAIROS_PRIVATE_KEY, provider);
 const admin = wallet.address;
 console.log("");
 console.log("!! signer addr =", wallet.address);
