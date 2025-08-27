@@ -14,5 +14,6 @@
     "stableRatio": 10000,
     "balancedRatio": 0,
     "aggressiveRatio": 0
-  }
+  },
+  "lastVaultCoreUpgrade": "2025-08-27T12:22:18.572Z"
 }

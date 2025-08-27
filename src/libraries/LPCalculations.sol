@@ -12,6 +12,7 @@ import {TokenInfo} from "../interfaces/ITokenInfo.sol";
 library LPCalculations {
     /**
      * @dev Calculate the underlying value of LP tokens
+     * Now correctly sums all non-BPT token balances for accurate valuation
      */
     function calculateLPTokenValue(
         uint256 lpAmount,
@@ -27,21 +28,14 @@ library LPCalculations {
         (address[] memory poolTokens, uint256[] memory balances, ) = 
             IBalancerVaultExtended(balancerVault).getPoolTokens(tokenInfo.pool1);
         
-        // Find token indices
-        uint256 lstTokenIndex = type(uint256).max;
+        // Find BPT index to exclude from total value calculation
         uint256 bptIndex = type(uint256).max;
         
         for (uint256 i = 0; i < poolTokens.length; i++) {
-            if (poolTokens[i] == tokenInfo.tokenA) {
-                lstTokenIndex = i;
-            }
             if (poolTokens[i] == lpToken) {
                 bptIndex = i;
+                break;
             }
-        }
-        
-        if (lstTokenIndex == type(uint256).max) {
-            return 0;
         }
         
         // Get actual supply
@@ -50,9 +44,18 @@ library LPCalculations {
             return 0;
         }
         
-        // Calculate proportional share
-        uint256 lstBalanceInPool = balances[lstTokenIndex];
-        return (lpAmount * lstBalanceInPool) / actualSupply;
+        // Calculate total value of all non-BPT tokens in the pool
+        uint256 totalPoolValue = 0;
+        for (uint256 i = 0; i < poolTokens.length; i++) {
+            // Skip BPT token itself (it's not part of the underlying value)
+            if (i != bptIndex) {
+                totalPoolValue += balances[i];
+            }
+        }
+        
+        // Calculate proportional share based on all underlying tokens
+        // This gives the actual value of LP tokens in terms of underlying assets
+        return (lpAmount * totalPoolValue) / actualSupply;
     }
     
     /**
