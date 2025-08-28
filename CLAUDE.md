@@ -270,6 +270,7 @@ await shareVault.withdraw(withdrawWKAIA, user, user);
   - `upgradeVaultCore.js` - Upgrade VaultCore only (supports PROFILE env var)
   - `upgradeSwapContract.js` - Upgrade SwapContract only (supports PROFILE env var)
   - `setAPY.js` - Set APY values
+  - `sendWKAIAtoVaultCores.js` - Send WKAIA rewards to VaultCore contracts (supports both networks)
 - `scripts/tests/` - Test scripts
   - `testIntegratedStable.js` - STABLE mode integrated test with 3 KAIA WKAIA deposit
   - `testIntegratedBalanced.js` - BALANCED mode integrated test with 3 KAIA WKAIA deposit
@@ -302,9 +303,21 @@ await shareVault.withdraw(withdrawWKAIA, user, user);
 2. **Never modify SwapContract.sol** - It's finalized and tested
 3. **Test scripts are in `scripts/tests/` directory**
 4. **Use `testSeparatedVault.js` for V2 testing**
-5. **Deployment info is in `deployments-{network}.json`**
-   - Kairos testnet: `deployments-kairos.json`
-   - Kaia mainnet: `deployments-kaia.json`
+5. **Deployment info is in `deployments-{profile}-{network}.json`**
+   - Kairos testnet: `deployments-stable-kairos.json`, `deployments-balanced-kairos.json`
+   - Kaia mainnet: `deployments-stable-kaia.json`, `deployments-balanced-kaia.json`
+
+### Sending Rewards to VaultCore:
+Use `scripts/sendWKAIAtoVaultCores.js` to send WKAIA rewards:
+```bash
+# Send 0.5 WKAIA to each VaultCore (default)
+npx hardhat run scripts/sendWKAIAtoVaultCores.js --network kaia
+npx hardhat run scripts/sendWKAIAtoVaultCores.js --network kairos
+
+# Send custom amount
+SEND_AMOUNT=1 npx hardhat run scripts/sendWKAIAtoVaultCores.js --network kaia
+```
+This increases totalAssets for all depositors proportionally.
 
 ### Investment Profile Ratios Explained (2025-08-23):
 - **investRatio**: Percentage of total WKAIA to convert to LSTs (e.g., 90%)
@@ -766,6 +779,26 @@ userData: abi.encode(1, amountsForUserData, 0)  // JOIN_KIND_EXACT_TOKENS_IN_FOR
 - Successful tx: 0x497d271f... (provided by user) shows correct encoding pattern
 - This pattern is now implemented in VaultCore._addLSTsToPool1()
 
+### Depositor Counting Feature (2025-08-28)
+
+**✅ IMPLEMENTED: Track unique depositors in ShareVault**
+
+#### Key Features:
+1. **Unique Depositor Tracking**: `totalDepositors` public variable tracks number of unique depositors
+2. **Shares-based Detection**: Uses share balance (not deposit amount) to determine full withdrawal
+3. **Dust Cleanup**: Automatically cleans deposit amount dust when shares reach 0
+
+#### Technical Implementation:
+- **New variable**: `uint256 public totalDepositors` at end of storage for upgrade compatibility
+- **Increment**: When `deposits[user].amount == 0` on new deposit
+- **Decrement**: When `balanceOf(user) == 0` after withdrawal (shares-based check)
+- **Dust handling**: Sets `deposits[user].amount = 0` when shares are 0
+
+#### Important Notes:
+- Only tracks depositors from upgrade onwards (existing depositors not retroactively counted)
+- Uses shares instead of deposit amount for accuracy (prevents rounding issues)
+- Available on all networks: Kaia mainnet and Kairos testnet
+
 ### Sequential Swap with APY-based Ordering (2025-08-25)
 
 **✅ IMPLEMENTED: APY-based sequential swap with configurable slippage**
@@ -841,6 +874,9 @@ uint256 targetWKAIA = (needed * (10000 + slippage)) / 10000;
 - **SwapContract asset recovery functions added for stranded tokens (2025-08-25)**
 - **investRatio set to 100% for maximum LST investment (2025-08-26)**
 - **Balancer exitPool exitTokenIndex fixed - uses sorted non-BPT token indices (2025-08-26)**
+- **LP token value calculation fixed - includes all LSTs in pool, not just one (2025-08-27)**
+- **Depositor counting feature added - tracks unique depositors with shares-based logic (2025-08-28)**
+- **sendWKAIAtoVaultCores.js script created for reward distribution (2025-08-28)**
 
 ### Critical Lessons Learned (2025-08-26)
 

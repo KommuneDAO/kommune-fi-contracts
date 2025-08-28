@@ -50,6 +50,9 @@ contract ShareVault is ERC4626Upgradeable, OwnableUpgradeable, ReentrancyGuardUp
     address[] public providers;
     mapping(address => bool) public isProvider;
     
+    // Depositor tracking (added at end for upgrade compatibility)
+    uint256 public totalDepositors;
+    
     // Events
     event VaultCoreUpdated(address indexed oldCore, address indexed newCore);
     event FeesUpdated(uint256 basisPoints);
@@ -130,6 +133,12 @@ contract ShareVault is ERC4626Upgradeable, OwnableUpgradeable, ReentrancyGuardUp
         
         // Update tracking
         lastDepositBlock[msg.sender] = block.number;
+        
+        // Track new depositors
+        if (deposits[msg.sender].amount == 0) {
+            totalDepositors++;
+        }
+        
         deposits[msg.sender].amount += assets;
         deposits[msg.sender].timestamp = block.timestamp;
         
@@ -258,6 +267,13 @@ contract ShareVault is ERC4626Upgradeable, OwnableUpgradeable, ReentrancyGuardUp
             deposits[owner].amount -= assets;
         } else {
             deposits[owner].amount = 0;
+        }
+        
+        // Decrease depositor count if fully withdrawn (check shares, not deposit amount)
+        // Using shares is more accurate as deposit amount might have rounding dust
+        if (balanceOf(owner) == 0 && totalDepositors > 0) {
+            totalDepositors--;
+            deposits[owner].amount = 0; // Clean up any dust
         }
         
         // Emit appropriate event
@@ -428,6 +444,13 @@ contract ShareVault is ERC4626Upgradeable, OwnableUpgradeable, ReentrancyGuardUp
             deposits[owner].amount = 0;
         }
         
+        // Decrease depositor count if fully withdrawn (check shares, not deposit amount)
+        // Using shares is more accurate as deposit amount might have rounding dust
+        if (balanceOf(owner) == 0 && totalDepositors > 0) {
+            totalDepositors--;
+            deposits[owner].amount = 0; // Clean up any dust
+        }
+        
         // Emit appropriate event
         if (provider != address(0) && isProvider[provider]) {
             emit WithdrawWithProvider(msg.sender, receiver, owner, assets, shares, provider, providerFee);
@@ -463,6 +486,12 @@ contract ShareVault is ERC4626Upgradeable, OwnableUpgradeable, ReentrancyGuardUp
         
         // Update tracking
         lastDepositBlock[msg.sender] = block.number;
+        
+        // Track new depositors
+        if (deposits[msg.sender].amount == 0) {
+            totalDepositors++;
+        }
+        
         deposits[msg.sender].amount += assets;
         deposits[msg.sender].timestamp = block.timestamp;
         
