@@ -1074,11 +1074,18 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
      * @return underlyingAmount Amount of wrapped LST tokens the LP represents
      */
     function _calculateLPTokenValue(uint256 lstIndex, uint256 lpAmount) private view returns (uint256) {
+        // Create a fixed-size array to pass all tokensInfo
+        TokenInfo[4] memory allTokensInfo;
+        for (uint256 i = 0; i < 4; i++) {
+            allTokensInfo[i] = tokensInfo[i];
+        }
+        
         return LPCalculations.calculateLPTokenValue(
             lpAmount,
             lpToken,
             balancerVault,
-            tokensInfo[lstIndex]
+            tokensInfo[lstIndex],
+            allTokensInfo
         );
     }
     
