@@ -877,6 +877,47 @@ uint256 targetWKAIA = (needed * (10000 + slippage)) / 10000;
 - **LP token value calculation fixed - includes all LSTs in pool, not just one (2025-08-27)**
 - **Depositor counting feature added - tracks unique depositors with shares-based logic (2025-08-28)**
 - **sendWKAIAtoVaultCores.js script created for reward distribution (2025-08-28)**
+- **LP token value calculation fixed to convert LSTs to WKAIA values - BALANCED now shows correct higher returns (2025-09-01)**
+
+### LP Token Value Calculation Fix (2025-09-01)
+
+**✅ FIXED: LP tokens now properly valued with LST unwrap conversions**
+
+#### Problem Identified:
+- **Symptom**: BALANCED profile showed lower returns than STABLE despite earning additional LP fees
+- **Root Cause**: LP value calculation used raw LST amounts instead of converting to WKAIA values
+- **Impact**: LP tokens undervalued by ~15-18% (only counting token amounts, not actual values)
+
+#### Solution Applied:
+Added LST to WKAIA conversion in LPCalculations library:
+- wKoKAIA: Uses `getUnwrappedAmount()` for ~1.16x value
+- wGCKAIA: Uses `getGCKLAYByWGCKLAY()` for conversion  
+- wstKLAY: Uses `getUnwrappedAmount()` for unwrapping
+- stKAIA: Already in base form, valued 1:1 with WKAIA
+
+#### Implementation Details:
+```solidity
+// LPCalculations.sol - Convert each LST to WKAIA value
+function convertLSTtoWKAIAValue(
+    address token,
+    uint256 amount,
+    TokenInfo[4] memory allTokensInfo
+) internal view returns (uint256) {
+    // Find token type and apply appropriate conversion
+    if (token is wKoKAIA or wstKLAY) {
+        return IWrappedLST(token).getUnwrappedAmount(amount);
+    } else if (token is wGCKAIA) {
+        return IWrappedLST(token).getGCKLAYByWGCKLAY(amount);
+    }
+    // stKAIA and others valued 1:1
+    return amount;
+}
+```
+
+#### Test Results:
+- **Kairos Testnet**: LP value increased by 4.59%
+- **Kaia Mainnet**: LP value increased by 18.3% for BALANCED profile
+- **BALANCED now correctly shows higher returns than STABLE**
 
 ### Critical Lessons Learned (2025-08-26)
 
