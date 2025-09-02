@@ -1,5 +1,5 @@
 {
-  "claimManager": "0x0853370d571393E3A31D9A173a28E7Ed17C77ED6",
+  "claimManager": "0x149829Ebcc163e6E45CA9D73F600a8F2d3e14fBD",
   "swapContract": "0xC0AE8cdb7dd42eAfC2A5371d397369856c73130B",
   "vaultCore": "0xB4a79CAd8988f5698CF76b3A7806BE1A8929AFDd",
   "shareVault": "0x90af1a8b94480Ce57a4c4E86d14c8Fb3D95b425E",
@@ -15,6 +15,13 @@
     "balancedRatio": 0,
     "aggressiveRatio": 0
   },
-  "lastVaultCoreUpgrade": "2025-09-01T08:51:00.849Z",
-  "lastShareVaultUpgrade": "2025-09-01T08:52:26.323Z"
+  "lastVaultCoreUpgrade": "2025-09-02T00:16:37.018Z",
+  "lastShareVaultUpgrade": "2025-09-02T00:16:30.460Z",
+  "sharevaultImplementation": "0xa336cdbf5b57a809b2f7e0d90757bf6c6f0713d1",
+  "lastSwapContractUpgrade": "2025-09-02T00:16:41.031Z",
+  "swapcontractImplementation": "0xe2338350dce796df974dc30bcd2d87bd1bdfbc8a",
+  "lastClaimManagerDeploy": "2025-09-02T00:16:43.446Z",
+  "vaultCoreImplementation": "0xa3272d909c9a49f5148bfd784a7e80530c8a82de",
+  "lpCalculationsLibrary": "0xcc5Ad758e37d9807C843dE1B7d5Ec5D91AD4692A",
+  "vaultcoreImplementation": "0x89067d649a519bcd0022d861d12559b00bd23286"
 }

@@ -205,6 +205,38 @@ npx hardhat run scripts/upgradeSwapContract.js --network kairos
 
 **⚠️ WARNING**: SwapContract is FINALIZED and should not be modified
 
+### Known Issues and Solutions
+
+#### Hardhat Upgrades Plugin Cache Issue
+
+**Problem**: Upgrades plugin may reuse cached implementations instead of deploying new ones
+**Symptoms**: 
+- New functions not available after upgrade
+- Implementation address doesn't change
+- "execution reverted" errors on new functions
+
+**Solution**: Use enhanced upgrade scripts with cache handling
+```bash
+# Use Fixed scripts for reliable upgrades
+npm run upgrade:testnet:stable:fixed
+npm run upgrade:mainnet:stable:fixed
+
+# Or run directly with cache cleaning
+CLEAN_CACHE=true PROFILE=stable npx hardhat run scripts/upgradeAllFixed.js --network kairos
+```
+
+#### Library Linking for VaultCore
+
+**Problem**: VaultCore requires LPCalculations library to be deployed and linked
+**Solution**: Enhanced scripts handle this automatically
+```javascript
+// Scripts automatically:
+// 1. Deploy LPCalculations library
+// 2. Link library to VaultCore
+// 3. Deploy new implementation with library
+// 4. Upgrade proxy
+```
+
 ### Post-Upgrade Verification
 
 #### 1. Verify Storage Integrity

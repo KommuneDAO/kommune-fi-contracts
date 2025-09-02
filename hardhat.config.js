@@ -66,4 +66,8 @@ module.exports = {
   mocha: {
     timeout: 1800000, // 30 minutes for test timeout
   },
+  // Upgrades plugin configuration to prevent cache issues
+  defender: {
+    useDefenderDeploy: false
+  },
 };

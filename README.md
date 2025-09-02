@@ -23,9 +23,12 @@ src/
     └── Errors.sol         # Custom error definitions
 
 scripts/
-├── deployFresh.js         # Fresh deployment script
-├── upgradeAll.js          # Upgrade all contracts
+├── deployFreshStable.js   # Deploy with STABLE profile
+├── deployFreshBalanced.js # Deploy with BALANCED profile
+├── upgradeAll.js          # Standard upgrade (may have cache issues)
+├── upgradeAllFixed.js     # Enhanced upgrade with cache/library fixes
 ├── setAPY.js              # Configure APY settings
+├── sendWKAIAtoVaultCores.js # Send rewards to vaults
 ├── recoverSwapAssets.js   # Recover stranded assets from SwapContract
 └── tests/                 # Integration test suite
 

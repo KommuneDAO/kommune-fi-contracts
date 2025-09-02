@@ -263,14 +263,23 @@ await shareVault.withdraw(withdrawWKAIA, user, user);
 
 ### Scripts Organization
 - `scripts/` - Essential deployment and configuration scripts
-  - `deployFreshStable.js` - Deploy fresh V2 with STABLE profile (100% LST, no WKAIA buffer)
-  - `deployFreshBalanced.js` - Deploy fresh V2 with BALANCED profile (50% LST remains + 50% to LP)
-  - `upgradeAll.js` - Upgrade all V2 contracts (supports PROFILE env var)
-  - `upgradeShareVault.js` - Upgrade ShareVault only (supports PROFILE env var)
-  - `upgradeVaultCore.js` - Upgrade VaultCore only (supports PROFILE env var)
-  - `upgradeSwapContract.js` - Upgrade SwapContract only (supports PROFILE env var)
-  - `setAPY.js` - Set APY values
-  - `sendWKAIAtoVaultCores.js` - Send WKAIA rewards to VaultCore contracts (supports both networks)
+  - **Deployment Scripts:**
+    - `deployFreshStable.js` - Deploy fresh V2 with STABLE profile (100% LST, no WKAIA buffer)
+    - `deployFreshBalanced.js` - Deploy fresh V2 with BALANCED profile (50% LST remains + 50% to LP)
+  - **Standard Upgrade Scripts** (may encounter cache issues):
+    - `upgradeAll.js` - Upgrade all V2 contracts (supports PROFILE env var)
+    - `upgradeShareVault.js` - Upgrade ShareVault only (supports PROFILE env var)
+    - `upgradeVaultCore.js` - Upgrade VaultCore only (supports PROFILE env var)
+    - `upgradeSwapContract.js` - Upgrade SwapContract only (supports PROFILE env var)
+  - **Enhanced Upgrade Scripts** (with cache and library fixes - RECOMMENDED):
+    - `upgradeAllFixed.js` - Upgrade all contracts with cache handling and library linking
+    - `upgradeShareVaultFixed.js` - ShareVault upgrade with forced redeployment
+    - `upgradeVaultCoreFixed.js` - VaultCore upgrade with LPCalculations library linking
+    - `upgradeSwapContractFixed.js` - SwapContract upgrade with cache handling
+  - **Configuration Scripts:**
+    - `setAPY.js` - Set APY values
+    - `sendWKAIAtoVaultCores.js` - Send WKAIA rewards to VaultCore contracts (supports both networks)
+    - `recoverSwapAssets.js` - Recover stranded assets from SwapContract
 - `scripts/tests/` - Test scripts
   - `testIntegratedStable.js` - STABLE mode integrated test with 3 KAIA WKAIA deposit
   - `testIntegratedBalanced.js` - BALANCED mode integrated test with 3 KAIA WKAIA deposit
@@ -878,6 +887,8 @@ uint256 targetWKAIA = (needed * (10000 + slippage)) / 10000;
 - **Depositor counting feature added - tracks unique depositors with shares-based logic (2025-08-28)**
 - **sendWKAIAtoVaultCores.js script created for reward distribution (2025-08-28)**
 - **LP token value calculation fixed to convert LSTs to WKAIA values - BALANCED now shows correct higher returns (2025-09-01)**
+- **Contract upgrade cache issue resolved - totalDepositors now working with manual implementation deployment (2025-09-02)**
+- **Enhanced upgrade scripts created with cache handling and library linking support (2025-09-02)**
 
 ### LP Token Value Calculation Fix (2025-09-01)
 
@@ -918,6 +929,144 @@ function convertLSTtoWKAIAValue(
 - **Kairos Testnet**: LP value increased by 4.59%
 - **Kaia Mainnet**: LP value increased by 18.3% for BALANCED profile
 - **BALANCED now correctly shows higher returns than STABLE**
+
+### Contract Upgrade Issue Resolution (2025-09-02)
+
+**⚠️ CRITICAL: Hardhat upgrades plugin cache issue prevents new implementation deployment**
+
+#### Problem Identified:
+- **Symptom**: totalDepositors function fails with "evm: execution reverted" after upgrade
+- **Root Cause**: Hardhat upgrades plugin reuses cached implementation instead of deploying new one
+- **Impact**: New features added to contracts are not deployed, proxy points to old implementation
+
+#### Technical Details:
+1. **Implementation Cache**: Hardhat's upgrades plugin caches implementation addresses
+2. **Version Detection**: Plugin doesn't detect changes if bytecode appears similar
+3. **Stuck Implementation**: Proxy kept pointing to old implementation (0x4b38c789...) from before Aug 28
+
+#### Solution Process:
+1. **Add Version Function**: Force bytecode change by adding version() function
+```solidity
+function version() public pure returns (string memory) {
+    return "2.1.0"; // Version with totalDepositors
+}
+```
+
+2. **Clean Cache**: Remove OpenZeppelin upgrade cache
+```bash
+rm -rf .openzeppelin
+npx hardhat clean
+```
+
+3. **Manual Implementation Deployment**: Deploy new implementation directly
+```javascript
+const ShareVault = await ethers.getContractFactory("ShareVault");
+const newImplementation = await ShareVault.deploy();
+const newImplAddress = await newImplementation.getAddress();
+```
+
+4. **Direct Proxy Upgrade**: Use upgradeToAndCall to upgrade proxy
+```javascript
+const uupsABI = ["function upgradeToAndCall(address newImplementation, bytes calldata data)"];
+const proxy = new ethers.Contract(proxyAddress, uupsABI, deployer);
+await proxy.upgradeToAndCall(newImplAddress, '0x');
+```
+
+#### Verification Steps:
+- Check implementation address: `ethers.provider.getStorage(proxy, '0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc')`
+- Verify new features work: `await proxy.totalDepositors()`
+- Confirm version: `await proxy.version()`
+
+#### Prevention for Future:
+1. **Always add version function** and increment it for each upgrade
+2. **Clean cache before major upgrades**: `rm -rf .openzeppelin && npx hardhat clean`
+3. **Verify implementation address changed** after upgrade
+4. **Test new features immediately** after upgrade to confirm deployment
+5. **Consider manual deployment** if standard upgrade doesn't deploy new implementation
+
+#### Final Status:
+- ✅ STABLE totalDepositors: 9
+- ✅ BALANCED totalDepositors: 7
+- ✅ New Implementation: 0x94fF748d5552ec1D63Fe8Ce2c20Eb8e218f54F25
+- ✅ Version: 2.1.0
+
+### Contract Upgrade Scripts with Cache and Library Issues Resolution (2025-09-02)
+
+**⚠️ IMPORTANT: Enhanced upgrade scripts that handle cache issues and library linking**
+
+#### Background:
+After the cache issue discovered on 2025-08-31, comprehensive upgrade scripts were created to handle:
+1. **Hardhat upgrades plugin cache issues** - Forces new implementation deployment
+2. **Library linking for VaultCore** - LPCalculations library must be deployed and linked
+3. **Proxy registration issues** - Direct upgradeToAndCall fallback when proxy not recognized
+
+#### Enhanced Upgrade Scripts:
+
+##### 1. Individual Contract Upgrades (with fixes):
+- **`scripts/upgradeShareVaultFixed.js`** - Handles cache issues with forced redeployment
+- **`scripts/upgradeVaultCoreFixed.js`** - Includes LPCalculations library deployment and linking
+- **`scripts/upgradeSwapContractFixed.js`** - Cache-aware upgrade with fallback logic
+- **`scripts/upgradeAllFixed.js`** - Upgrades all contracts with comprehensive error handling
+
+##### 2. Key Features of Fixed Scripts:
+```javascript
+// Library deployment for VaultCore
+const LPCalculations = await ethers.getContractFactory("LPCalculations");
+const lpCalculations = await LPCalculations.deploy();
+const lpCalculationsAddress = await lpCalculations.getAddress();
+
+// Link library to VaultCore
+const VaultCore = await ethers.getContractFactory("VaultCore", {
+    libraries: {
+        LPCalculations: lpCalculationsAddress
+    }
+});
+
+// Force new implementation deployment
+{
+    redeployImplementation: 'always',
+    unsafeAllowLinkedLibraries: true,
+    unsafeAllow: ['delegatecall', 'external-library-linking']
+}
+
+// Fallback to direct upgrade when upgrades plugin fails
+const uupsABI = ["function upgradeToAndCall(address newImplementation, bytes calldata data)"];
+const proxy = new ethers.Contract(proxyAddress, uupsABI, deployer);
+await proxy.upgradeToAndCall(newImplAddress, '0x');
+```
+
+##### 3. Usage:
+```bash
+# Clean cache and upgrade all contracts
+CLEAN_CACHE=true PROFILE=stable npx hardhat run scripts/upgradeAllFixed.js --network kairos
+
+# Individual upgrades with specific profile
+PROFILE=balanced npx hardhat run scripts/upgradeVaultCoreFixed.js --network kaia
+
+# Force cache cleaning before upgrade
+rm -rf .openzeppelin cache artifacts/build-info
+npx hardhat compile
+```
+
+#### Technical Details:
+
+##### VaultCore Library Linking:
+- VaultCore uses LPCalculations library for LP token valuation
+- Library must be deployed first before VaultCore implementation
+- Library address must be linked when creating VaultCore factory
+- Requires `unsafeAllowLinkedLibraries: true` flag
+
+##### Cache Issue Mitigation:
+- `redeployImplementation: 'always'` forces new deployment
+- Manual deployment fallback when upgrades plugin fails
+- Direct upgradeToAndCall when proxy not recognized
+- Implementation address verification after upgrade
+
+#### Test Results:
+- ✅ Kairos STABLE: All contracts upgraded successfully with library linking
+- ✅ Kairos BALANCED: All contracts upgraded successfully
+- ✅ Kaia mainnet: Manual upgrade successful for critical issues
+- ✅ Library linking: LPCalculations properly deployed and linked
 
 ### Critical Lessons Learned (2025-08-26)
 

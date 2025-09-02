@@ -16,5 +16,6 @@
     "aggressiveRatio": 0
   },
   "lastVaultCoreUpgrade": "2025-09-01T08:54:17.437Z",
-  "lastShareVaultUpgrade": "2025-09-01T08:55:10.893Z"
+  "lastShareVaultUpgrade": "2025-09-01T23:43:13.221Z",
+  "shareVaultImplementation": "0x94fF748d5552ec1D63Fe8Ce2c20Eb8e218f54F25"
 }

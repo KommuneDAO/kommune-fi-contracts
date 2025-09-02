@@ -23,9 +23,12 @@ src/
     └── Errors.sol         # 커스텀 에러 정의
 
 scripts/
-├── deployFresh.js         # 신규 배포 스크립트
-├── upgradeAll.js          # 모든 컨트랙트 업그레이드
+├── deployFreshStable.js   # STABLE 프로필로 배포
+├── deployFreshBalanced.js # BALANCED 프로필로 배포
+├── upgradeAll.js          # 표준 업그레이드 (캐시 문제 발생 가능)
+├── upgradeAllFixed.js     # 캐시/라이브러리 문제 해결된 업그레이드
 ├── setAPY.js              # APY 설정
+├── sendWKAIAtoVaultCores.js # 볼트에 리워드 전송
 ├── recoverSwapAssets.js   # SwapContract 잔류 자산 회수
 └── tests/                 # 통합 테스트
 

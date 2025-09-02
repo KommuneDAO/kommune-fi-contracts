@@ -588,6 +588,11 @@ contract ShareVault is ERC4626Upgradeable, OwnableUpgradeable, ReentrancyGuardUp
         return providers.length;
     }
     
+    // Version tracking for upgrades
+    function version() public pure returns (string memory) {
+        return "2.1.0"; // Added totalDepositors feature
+    }
+    
     // Required for UUPS
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 }

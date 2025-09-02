@@ -205,6 +205,38 @@ npx hardhat run scripts/upgradeSwapContract.js --network kairos
 
 **⚠️ 경고**: SwapContract는 최종 완성되었으며 수정하지 않아야 합니다
 
+### 알려진 문제와 해결 방법
+
+#### Hardhat Upgrades 플러그인 캐시 문제
+
+**문제**: Upgrades 플러그인이 새로운 구현체를 배포하지 않고 캐시된 구현체를 재사용할 수 있음
+**증상**: 
+- 업그레이드 후 새 함수를 사용할 수 없음
+- Implementation 주소가 변경되지 않음
+- 새 함수 호출 시 "execution reverted" 에러
+
+**해결책**: 캐시 처리 기능이 있는 향상된 업그레이드 스크립트 사용
+```bash
+# Fixed 스크립트를 사용한 안정적인 업그레이드
+npm run upgrade:testnet:stable:fixed
+npm run upgrade:mainnet:stable:fixed
+
+# 또는 캐시 정리와 함께 직접 실행
+CLEAN_CACHE=true PROFILE=stable npx hardhat run scripts/upgradeAllFixed.js --network kairos
+```
+
+#### VaultCore 라이브러리 링킹
+
+**문제**: VaultCore는 LPCalculations 라이브러리를 배포하고 링크해야 함
+**해결책**: 향상된 스크립트가 자동으로 처리
+```javascript
+// 스크립트가 자동으로:
+// 1. LPCalculations 라이브러리 배포
+// 2. VaultCore에 라이브러리 링크
+// 3. 라이브러리가 포함된 새 구현체 배포
+// 4. 프록시 업그레이드
+```
+
 ### 업그레이드 후 검증
 
 #### 1. 스토리지 무결성 확인
