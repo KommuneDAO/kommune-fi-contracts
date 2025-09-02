@@ -15,13 +15,13 @@
     "balancedRatio": 0,
     "aggressiveRatio": 0
   },
-  "lastVaultCoreUpgrade": "2025-09-02T00:37:36.518Z",
-  "lastShareVaultUpgrade": "2025-09-02T00:37:25.121Z",
-  "sharevaultImplementation": "0x598ebddf0e7925279b8215532844870afb3c179e",
-  "lastSwapContractUpgrade": "2025-09-02T00:37:44.695Z",
-  "swapcontractImplementation": "0x5bef98166fb40a956ee6839af7f39f3948dabcfc",
+  "lastVaultCoreUpgrade": "2025-09-02T00:40:56.050Z",
+  "lastShareVaultUpgrade": "2025-09-02T00:40:47.078Z",
+  "sharevaultImplementation": "0x66ca2b1766248fb6355144e5e054adac1ac6be9b",
+  "lastSwapContractUpgrade": "2025-09-02T00:41:01.035Z",
+  "swapcontractImplementation": "0x0638a84412e3bf4450f32be469d9b36e81f5bb6c",
   "lastClaimManagerDeploy": "2025-09-02T00:35:21.749Z",
   "vaultCoreImplementation": "0xa3272d909c9a49f5148bfd784a7e80530c8a82de",
-  "lpCalculationsLibrary": "0xE2921253f13CE786e90a85fD7457c4AEF5c96077",
-  "vaultcoreImplementation": "0x98e0404c6f1752fa37b678c5d6fb18dbf55cfb9f"
+  "lpCalculationsLibrary": "0x713a23c29665C69FD77652D2C61D0b4D1a259D1D",
+  "vaultcoreImplementation": "0xcaeaba2efd0a4907005b14ebad18ef691fbfa2a1"
 }

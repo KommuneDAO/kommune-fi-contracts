@@ -15,12 +15,13 @@
     "balancedRatio": 5000,
     "aggressiveRatio": 0
   },
-  "lastVaultCoreUpgrade": "2025-09-02T00:08:23.977Z",
-  "lastShareVaultUpgrade": "2025-09-02T00:07:21.480Z",
-  "sharevaultImplementation": "0x48b2b36c6c59296cc483d588150e53c9f38b6986",
-  "lastSwapContractUpgrade": "2025-09-02T00:07:25.731Z",
-  "swapcontractImplementation": "0x2f7ca0a96d4f039a8dfcfe040252b33bb90ff92c",
+  "lastVaultCoreUpgrade": "2025-09-02T00:44:38.892Z",
+  "lastShareVaultUpgrade": "2025-09-02T00:44:32.927Z",
+  "sharevaultImplementation": "0x664472965b594fcf15de920f4039d08230005d85",
+  "lastSwapContractUpgrade": "2025-09-02T00:44:41.351Z",
+  "swapcontractImplementation": "0xba8e37e502e3985c5e41ae37965cedc25ba51450",
   "lastClaimManagerDeploy": "2025-09-02T00:07:29.807Z",
   "vaultCoreImplementation": "0x3b7141b3e4f6012a3bbba59e9a309ccdc1a92542",
-  "lpCalculationsLibrary": "0xB0C2b8D9ceC01981079e2A825abfC01e494aF494"
+  "lpCalculationsLibrary": "0x9201D054a3E9772c3De72b105C83Be2781CDD840",
+  "vaultcoreImplementation": "0xe7e38cb7429e6b9ebd702aa53e29f967d2c284fe"
 }
