@@ -10,11 +10,26 @@ interface IWrappedLST {
     function getGCKLAYByWGCKLAY(uint256 amount) external view returns (uint256);
 }
 
+interface IRateProvider {
+    function getRate() external view returns (uint256);
+}
+
 /**
  * @title LPCalculations
  * @dev Library for LP token value calculations to reduce main contract size
  */
 library LPCalculations {
+    // Mainnet rate provider addresses
+    address constant KOKAIA_RATE_PROVIDER = 0x0b500A7139c1f3300e28EA7aE796AF7FD9DE529F;
+    address constant GCKAIA_RATE_PROVIDER = 0x8cCbEa45e02535475E461CEab1520EF961A0BE46;
+    address constant STKLAY_RATE_PROVIDER = 0x532Db3B7ecc60b21149b515eBA271c58996dcB99;
+    address constant STKAIA_RATE_PROVIDER = 0xefBDe60d5402a570DF7CA0d26Ddfedc413260146;
+    address constant SKLAY_RATE_PROVIDER = 0x15F6f25fDedf002B02d6E6be410451866Ff5Ac93;
+    
+    // Check if on mainnet (chainId 8217)
+    function isMainnet() internal view returns (bool) {
+        return block.chainid == 8217;
+    }
     /**
      * @dev Calculate the underlying value of LP tokens in WKAIA terms
      * Converts each LST to its WKAIA value before summing
@@ -68,7 +83,7 @@ library LPCalculations {
     
     /**
      * @dev Convert LST token amount to WKAIA value
-     * Takes into account unwrapping ratios for each LST type
+     * Takes into account unwrapping ratios for each LST type and rate providers on mainnet
      */
     function convertLSTtoWKAIAValue(
         address token,
@@ -83,33 +98,78 @@ library LPCalculations {
             
             // Check if this is the wrapped token (tokenA)
             if (info.tokenA == token && info.tokenA != address(0)) {
+                uint256 unwrappedAmount = amount;
+                
+                // First unwrap the token
                 // wKoKAIA (index 0) or wstKLAY (index 2) - use getUnwrappedAmount
                 if (i == 0 || i == 2) {
                     try IWrappedLST(token).getUnwrappedAmount(amount) returns (uint256 unwrapped) {
-                        return unwrapped;
+                        unwrappedAmount = unwrapped;
                     } catch {
-                        return amount; // Fallback to 1:1 if call fails
+                        // Fallback to 1:1 if call fails
                     }
                 }
                 // wGCKAIA (index 1) - use getGCKLAYByWGCKLAY
                 else if (i == 1) {
                     try IWrappedLST(token).getGCKLAYByWGCKLAY(amount) returns (uint256 unwrapped) {
-                        return unwrapped;
+                        unwrappedAmount = unwrapped;
                     } catch {
-                        return amount; // Fallback to 1:1 if call fails
+                        // Fallback to 1:1 if call fails
                     }
                 }
+                
+                // Then apply rate provider conversion on mainnet
+                if (isMainnet()) {
+                    return applyRateProvider(unwrappedAmount, i);
+                }
+                
+                return unwrappedAmount;
             }
             // Check if this is the unwrapped asset
             else if (info.asset == token) {
-                // For unwrapped assets (stKAIA at index 3 or others), return as is
-                // These are already in their base form and valued 1:1 with WKAIA
+                // For unwrapped assets, apply rate provider if on mainnet
+                if (isMainnet()) {
+                    return applyRateProvider(amount, i);
+                }
+                // Otherwise return as is (1:1 with WKAIA on testnet)
                 return amount;
             }
         }
         
         // If token not found in tokensInfo, assume 1:1 with WKAIA
         return amount;
+    }
+    
+    /**
+     * @dev Apply rate provider conversion for mainnet
+     * @param amount The amount of unwrapped LST
+     * @param lstIndex The index of the LST (0=KoKAIA, 1=GCKAIA, 2=stKLAY, 3=stKAIA)
+     * @return The amount converted to KAIA value
+     */
+    function applyRateProvider(uint256 amount, uint256 lstIndex) internal view returns (uint256) {
+        address rateProvider;
+        
+        if (lstIndex == 0) {
+            rateProvider = KOKAIA_RATE_PROVIDER;
+        } else if (lstIndex == 1) {
+            rateProvider = GCKAIA_RATE_PROVIDER;
+        } else if (lstIndex == 2) {
+            rateProvider = STKLAY_RATE_PROVIDER;
+        } else if (lstIndex == 3) {
+            rateProvider = STKAIA_RATE_PROVIDER;
+        } else {
+            return amount; // Unknown LST, return as is
+        }
+        
+        // Get rate from provider
+        try IRateProvider(rateProvider).getRate() returns (uint256 rate) {
+            // Rate is typically in 1e18 format (1e18 = 1:1 ratio)
+            // Convert: amount * rate / 1e18
+            return (amount * rate) / 1e18;
+        } catch {
+            // If rate provider fails, return original amount
+            return amount;
+        }
     }
     
     /**
