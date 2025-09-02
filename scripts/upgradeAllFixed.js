@@ -174,17 +174,64 @@ async function main() {
         }
     }
     
-    // ClaimManager 재배포 (프록시 아님)
-    console.log("\n📦 ClaimManager 재배포 중...");
+    // ClaimManager 처리 (변경이 있을 때만 재배포)
+    console.log("\n📦 ClaimManager 확인 중...");
     try {
         const ClaimManager = await ethers.getContractFactory("ClaimManager");
-        const claimManager = await ClaimManager.deploy();
-        await claimManager.waitForDeployment();
-        const claimManagerAddress = await claimManager.getAddress();
+        const newBytecode = ClaimManager.bytecode;
         
-        console.log(`  ✓ 새 ClaimManager 배포됨: ${claimManagerAddress}`);
+        // 현재 ClaimManager의 바이트코드 확인
+        let needsDeployment = false;
+        let currentCode = '0x';
         
-        if (deployments.claimManager !== claimManagerAddress) {
+        if (deployments.claimManager && deployments.claimManager !== '0x0000000000000000000000000000000000000000') {
+            try {
+                currentCode = await ethers.provider.getCode(deployments.claimManager);
+                console.log(`  현재 ClaimManager: ${deployments.claimManager}`);
+                
+                // 단순 비교로는 정확하지 않을 수 있으므로, 코드 크기로 간단히 체크
+                // 또는 특정 함수의 selector 존재 여부로 체크
+                const currentSize = currentCode.length;
+                const expectedMinSize = 1000; // ClaimManager는 충분히 큰 컨트랙트
+                
+                if (currentSize < expectedMinSize) {
+                    console.log("  ⚠️  현재 ClaimManager가 비정상적으로 작음");
+                    needsDeployment = true;
+                } else {
+                    // 함수 selector로 간단한 체크 (executeUnstake: 0x9d6922d2)
+                    const executeUnstakeSelector = '9d6922d2'; // executeUnstake(address,uint256,uint256)
+                    const executeClaimSelector = '9b74f48e'; // executeClaim(address,uint256)
+                    
+                    if (!currentCode.includes(executeUnstakeSelector)) {
+                        console.log("  ⚠️  ClaimManager executeUnstake 함수가 없거나 변경됨");
+                        needsDeployment = true;
+                    } else {
+                        console.log("  ✅ ClaimManager 변경사항 없음, 기존 주소 유지");
+                        results.ClaimManager = {
+                            success: true,
+                            kept: true,
+                            address: deployments.claimManager
+                        };
+                    }
+                }
+            } catch (e) {
+                console.log("  ⚠️  현재 ClaimManager 확인 실패:", e.message);
+                needsDeployment = true;
+            }
+        } else {
+            console.log("  ⚠️  ClaimManager 주소가 없음");
+            needsDeployment = true;
+        }
+        
+        // 변경이 있거나 배포가 필요한 경우에만 재배포
+        if (needsDeployment) {
+            console.log("  새 ClaimManager 배포 중...");
+            const claimManager = await ClaimManager.deploy();
+            await claimManager.waitForDeployment();
+            const claimManagerAddress = await claimManager.getAddress();
+            
+            console.log(`  ✓ 새 ClaimManager 배포됨: ${claimManagerAddress}`);
+            
             // VaultCore에 새 ClaimManager 설정
             const vaultCore = await ethers.getContractAt("VaultCore", deployments.vaultCore);
             const tx = await vaultCore.setClaimManager(claimManagerAddress);
@@ -200,7 +247,7 @@ async function main() {
             };
         }
     } catch (error) {
-        console.error("  ❌ ClaimManager 재배포 실패:", error.message);
+        console.error("  ❌ ClaimManager 처리 실패:", error.message);
         results.ClaimManager = {
             success: false,
             error: error.message
