@@ -208,6 +208,11 @@ npx hardhat run scripts/recoverSwapAssets.js --network kaia
 
 ⚠️ **WKAIA 입금 패턴**: WKAIA 상태 동기화 이슈로 인해, 입금 시 ShareVault에서 WKAIA를 KAIA로 변환 후 VaultCore로 전송합니다.
 
+⚠️ **LP 가치 계산 (2025-09-02 업데이트)**: 메인넷 6-토큰 풀에서 LP 가치 계산 시:
+- KoKAIA, GCKAIA, stKLAY: 언래핑된 수량만 사용 (rate provider 미사용)
+- stKAIA, sKLAY: Rate provider를 통한 KAIA 변환값 사용
+- 자세한 내용은 [LP 계산 로직 문서](./docs/LP_CALCULATION_LOGIC_KR.md) 참조
+
 ## 라이선스
 
 MIT

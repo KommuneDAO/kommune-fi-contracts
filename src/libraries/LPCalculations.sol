@@ -92,6 +92,16 @@ library LPCalculations {
     ) internal view returns (uint256) {
         if (amount == 0) return 0;
         
+        // Special handling for sKLAY on mainnet (not in our tokensInfo but exists in pool)
+        if (isMainnet() && token == 0xA323d7386b671E8799dcA3582D6658FdcDcD940A) {
+            // sKLAY uses its rate provider
+            try IRateProvider(SKLAY_RATE_PROVIDER).getRate() returns (uint256 rate) {
+                return (amount * rate) / 1e18;
+            } catch {
+                return amount; // Fallback to 1:1 if rate provider fails
+            }
+        }
+        
         // Find which LST this token corresponds to
         for (uint256 i = 0; i < 4; i++) {
             TokenInfo memory info = allTokensInfo[i];
@@ -147,29 +157,29 @@ library LPCalculations {
      * @return The amount converted to KAIA value
      */
     function applyRateProvider(uint256 amount, uint256 lstIndex) internal view returns (uint256) {
-        address rateProvider;
-        
-        if (lstIndex == 0) {
-            rateProvider = KOKAIA_RATE_PROVIDER;
-        } else if (lstIndex == 1) {
-            rateProvider = GCKAIA_RATE_PROVIDER;
-        } else if (lstIndex == 2) {
-            rateProvider = STKLAY_RATE_PROVIDER;
-        } else if (lstIndex == 3) {
-            rateProvider = STKAIA_RATE_PROVIDER;
-        } else {
-            return amount; // Unknown LST, return as is
-        }
-        
-        // Get rate from provider
-        try IRateProvider(rateProvider).getRate() returns (uint256 rate) {
-            // Rate is typically in 1e18 format (1e18 = 1:1 ratio)
-            // Convert: amount * rate / 1e18
-            return (amount * rate) / 1e18;
-        } catch {
-            // If rate provider fails, return original amount
+        // KoKAIA (index 0), GCKAIA (index 1), stKLAY (index 2) don't use rate providers
+        // They just use unwrapped amounts directly
+        if (lstIndex == 0 || lstIndex == 1 || lstIndex == 2) {
             return amount;
         }
+        
+        // Only stKAIA (index 3) uses rate provider
+        if (lstIndex == 3) {
+            address rateProvider = STKAIA_RATE_PROVIDER;
+            
+            // Get rate from provider
+            try IRateProvider(rateProvider).getRate() returns (uint256 rate) {
+                // Rate is typically in 1e18 format (1e18 = 1:1 ratio)
+                // Convert: amount * rate / 1e18
+                return (amount * rate) / 1e18;
+            } catch {
+                // If rate provider fails, return original amount
+                return amount;
+            }
+        }
+        
+        // Unknown LST, return as is
+        return amount;
     }
     
     /**

@@ -141,3 +141,24 @@ userData = abi.encode(0, lpAmount, 5);
 - **원인**: SKLAY를 0이 아닌 값으로 설정
 - **해결**: maxAmountsIn[3] = 0 확인 (메인넷)
 - **주의**: SKLAY는 절대 스테이킹에 사용하지 않음
+
+## LP 가치 계산 (2025-09-02 업데이트)
+
+### LP 토큰 가치 계산 시 토큰 처리 방식
+
+메인넷 6-토큰 풀에서 LP 가치를 계산할 때, 각 토큰은 다음과 같이 처리됩니다:
+
+| 토큰 | 언래핑 | Rate Provider 사용 | 최종 가치 계산 |
+|------|--------|-------------------|---------------|
+| wKoKAIA → KoKAIA | ✅ | ❌ | 언래핑된 수량 직접 사용 |
+| wGCKAIA → GCKAIA | ✅ | ❌ | 언래핑된 수량 직접 사용 |
+| wstKLAY → stKLAY | ✅ | ❌ | 언래핑된 수량 직접 사용 |
+| stKAIA | ❌ | ✅ | `amount * rate / 1e18` |
+| sKLAY | ❌ | ✅ | `amount * rate / 1e18` |
+| BPT | - | - | 계산에서 제외 |
+
+**Rate Providers:**
+- stKAIA: `0xefBDe60d5402a570DF7CA0d26Ddfedc413260146`
+- sKLAY: `0x15F6f25fDedf002B02d6E6be410451866Ff5Ac93`
+
+자세한 내용은 [LP_CALCULATION_LOGIC_KR.md](./LP_CALCULATION_LOGIC_KR.md) 참조

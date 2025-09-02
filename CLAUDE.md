@@ -277,6 +277,20 @@ This increases totalAssets for all depositors proportionally.
 
 ## Recent Updates
 
+### LP Calculation Logic for Mainnet 6-Token Pool (2025-09-02)
+
+**✅ FINALIZED: LP value calculation correctly handles all tokens in mainnet pool**
+
+The LP calculation logic has been updated to properly handle the 6-token mainnet pool:
+
+**Token Handling:**
+- **KoKAIA, GCKAIA, stKLAY**: Use unwrapped amounts only (no rate provider multiplication)
+- **stKAIA**: Uses rate provider (0xefBDe60d5402a570DF7CA0d26Ddfedc413260146) for KAIA conversion
+- **sKLAY**: Uses rate provider (0x15F6f25fDedf002B02d6E6be410451866Ff5Ac93) for KAIA conversion
+- **BPT**: Excluded from value calculation
+
+For detailed implementation, see [LP_CALCULATION_LOGIC.md](./docs/LP_CALCULATION_LOGIC.md)
+
 ### Contract Upgrade Scripts with Cache and Library Issues Resolution (2025-09-02)
 
 **⚠️ IMPORTANT: Enhanced upgrade scripts that handle cache issues and library linking**
