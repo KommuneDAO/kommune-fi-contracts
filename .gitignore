@@ -27,3 +27,6 @@ contracts/artifacts
 /.states
 /flatten/
 /scripts/temp/
+
+# Log files
+*.log
