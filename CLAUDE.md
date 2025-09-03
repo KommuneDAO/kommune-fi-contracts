@@ -120,6 +120,18 @@ The SwapContract has been:
 
 ## Key Concepts
 
+### stKAIA Rate Provider Application (Fixed 2025-09-03)
+
+**✅ FIXED: Direct stKAIA holdings now correctly apply rate provider (1.0589x)**
+
+#### Background:
+- stKAIA is a rebasing token where 1 stKAIA > 1 KAIA due to accumulated staking rewards
+- Rate provider at 0xefBDe60d5402a570DF7CA0d26Ddfedc413260146 provides the conversion rate
+- Other LSTs (wKoKAIA, wGCKAIA, wstKLAY) use unwrapping functions for conversion
+
+#### The Fix:
+VaultCore now applies the rate provider when calculating totalAssets for direct stKAIA holdings (index 3).
+
 ### Important: Understanding Shares vs WKAIA
 
 **⚠️ CRITICAL: Users care about WKAIA amounts, not shares**
@@ -276,6 +288,24 @@ This increases totalAssets for all depositors proportionally.
   - 50% becomes LST then goes to LP pools (100% × 50%)
 
 ## Recent Updates
+
+### LP Query Tools Added (2025-09-03)
+
+**New utility scripts for LP token analysis:**
+- **`scripts/queryLPExit.js`** - Query single-token exit values from Balancer pools
+  - Supports custom LP amounts and specific token exits
+  - Calculates unwrapped KAIA values with rate providers
+- **`scripts/queryBPTSwap.js`** - Query BPT→WKAIA swap rates through dedicated pool
+  - Alternative to proportional exits for Composable Stable Pools
+  - Provides market-based pricing
+
+See [README.md](./README.md#lp-token-valuation-tools) for detailed usage instructions.
+
+### stKAIA Rate Provider Fix (2025-09-03)
+
+**✅ FIXED: Direct stKAIA holdings now correctly apply rate provider**
+
+VaultCore's `getTotalAssets()` now properly applies the rate provider (1.0589x) to direct stKAIA holdings, ensuring accurate share pricing for all depositors.
 
 ### LP Calculation Logic for Mainnet 6-Token Pool (2025-09-02)
 

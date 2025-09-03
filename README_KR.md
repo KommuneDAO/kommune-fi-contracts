@@ -198,6 +198,54 @@ npx hardhat run scripts/recoverSwapAssets.js --network kaia
 3. VaultCore로 회수 (owner 전용 작업)
 4. 성공적인 회수 검증
 
+### LP 토큰 가치 평가 도구
+
+#### LP Exit 가치 조회
+Balancer의 queryExit를 사용하여 LP 토큰 가치와 잠재적 출금 금액 분석:
+
+```bash
+# VaultCore의 현재 LP 잔액으로 조회
+npx hardhat run scripts/queryLPExit.js --network kaia
+
+# 사용자 지정 LP 금액으로 조회
+LP_AMOUNT=10 npx hardhat run scripts/queryLPExit.js --network kaia
+
+# 특정 토큰 exit 조회 (wstKLAY, stKAIA, SKLAY, wGCKAIA, wKoKAIA)
+EXIT_TOKEN=stKAIA npx hardhat run scripts/queryLPExit.js --network kaia
+
+# 모든 토큰 조회 (기본값)
+EXIT_TOKEN=all npx hardhat run scripts/queryLPExit.js --network kaia
+
+# 프로필 지정 (stable/balanced)
+PROFILE=balanced npx hardhat run scripts/queryLPExit.js --network kaia
+```
+
+스크립트가 제공하는 정보:
+- 각 LST별 단일 토큰 exit 가치
+- rate provider 계산이 적용된 언래핑된 KAIA 가치
+- 평균 KAIA 가치 및 BPT당 비율
+- 내부 LP 계산과의 비교
+
+#### BPT→WKAIA 스왑 조회
+전용 Balancer 풀을 통한 BPT→WKAIA 스왑 레이트 확인:
+
+```bash
+# VaultCore의 현재 BPT 잔액으로 조회
+npx hardhat run scripts/queryBPTSwap.js --network kaia
+
+# 사용자 지정 BPT 금액으로 조회
+BPT_AMOUNT=10 npx hardhat run scripts/queryBPTSwap.js --network kaia
+
+# 프로필 지정 (stable/balanced)
+PROFILE=balanced npx hardhat run scripts/queryBPTSwap.js --network kaia
+```
+
+스크립트가 제공하는 정보:
+- 직접 BPT→WKAIA 스왑 레이트
+- 환율 계산 (WKAIA/BPT)
+- Composable Stable Pool의 비례 exit 대안
+- 단일 토큰 exit 가치와의 비교
+
 ## 중요 사항
 
 ⚠️ **SwapContract는 최종 완성됨**: SwapContract는 4개 LST 모두에 대해 철저히 테스트되었으며 수정해서는 안 됩니다.

@@ -375,6 +375,56 @@ Added LST to WKAIA conversion in LPCalculations library:
 4. **Test new features immediately** after upgrade to confirm deployment
 5. **Consider manual deployment** if standard upgrade doesn't deploy new implementation
 
+### LP Exit Query Tools Implementation (2025-09-03)
+
+**✅ IMPLEMENTED: Tools for analyzing LP token values and exit strategies**
+
+#### Background:
+BALANCED profile showed unexpectedly low direct LST holdings (1.5%) vs LP holdings (98.5%) despite 50:50 intended ratio. Investigation required tools to verify LP token valuation.
+
+#### Tools Created:
+
+1. **`scripts/queryLPExit.js`** - Query single-token exit values from Balancer
+   - Uses BalancerQueries contract (0xF03Be4b9f68FA1206d00c1cA4fDB5BfB9A82184b)
+   - Supports EXACT_BPT_IN_FOR_ONE_TOKEN_OUT (Type 0) exits
+   - Calculates unwrapped KAIA values with rate providers
+   - Environment variables: `LP_AMOUNT`, `EXIT_TOKEN`, `PROFILE`
+
+2. **`scripts/queryBPTSwap.js`** - Query BPT→WKAIA swap rates
+   - Uses BPT-WKAIA pool (0x17f3eda2bf1aa1e7983906e675ac9a2ab6bc57de)
+   - Alternative to proportional exits for Composable Stable Pools
+   - Environment variables: `BPT_AMOUNT`, `PROFILE`
+
+#### Key Findings:
+- Composable Stable Pools don't support EXACT_BPT_IN_FOR_TOKENS_OUT (proportional exit)
+- BPT→WKAIA swap provides market-based pricing (1.0234 WKAIA/BPT)
+- Single-token exits average 1.027 KAIA/BPT
+- All methods produce consistent values (within 0.5% of each other)
+
+### stKAIA Rate Provider Fix (2025-09-03)
+
+**⚠️ CRITICAL: Direct stKAIA holdings were not applying rate provider**
+
+#### Problem:
+VaultCore's `getTotalAssets()` was treating stKAIA as 1:1 with KAIA instead of applying the rate provider (1.0589x).
+
+#### Solution:
+```solidity
+// VaultCore.sol lines 215-222
+if (i == 3) {
+    // stKAIA uses rate provider for proper valuation
+    total += LPCalculations.applyRateProvider(lstBalance, i);
+} else {
+    // Other LSTs are 1:1 after unwrapping
+    total += lstBalance;
+}
+```
+
+#### Impact:
+- **STABLE Profile**: +0.409 WKAIA (5.89% increase on 6.95 stKAIA holdings)
+- **BALANCED Profile**: +0.012 WKAIA (5.89% increase on 0.21 stKAIA holdings)
+- Ensures accurate share pricing for all vault depositors
+
 ### Contract Upgrade Scripts with Cache and Library Issues Resolution (2025-09-02)
 
 **⚠️ IMPORTANT: Enhanced upgrade scripts that handle cache issues and library linking**
@@ -453,3 +503,5 @@ const VaultCore = await ethers.getContractFactory("VaultCore", {
 27. **Contract upgrade cache issue resolved - totalDepositors now working with manual implementation deployment (2025-09-02)**
 28. **Enhanced upgrade scripts created with cache handling and library linking support (2025-09-02)**
 29. **ClaimManager optimization implemented - only redeploys when contract code changes (2025-09-02)**
+30. **LP Exit query tools created - queryLPExit.js and queryBPTSwap.js for LP token valuation analysis (2025-09-03)**
+31. **stKAIA rate provider fix - Applied rate provider (1.0589x) to direct stKAIA holdings in VaultCore (2025-09-03)**

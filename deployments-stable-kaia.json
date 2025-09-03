@@ -15,7 +15,9 @@
     "balancedRatio": 0,
     "aggressiveRatio": 0
   },
-  "lastVaultCoreUpgrade": "2025-09-01T08:54:17.437Z",
+  "lastVaultCoreUpgrade": "2025-09-03T04:26:01.871Z",
   "lastShareVaultUpgrade": "2025-09-01T23:43:13.221Z",
-  "shareVaultImplementation": "0x94fF748d5552ec1D63Fe8Ce2c20Eb8e218f54F25"
+  "shareVaultImplementation": "0x94fF748d5552ec1D63Fe8Ce2c20Eb8e218f54F25",
+  "vaultCoreImplementation": "0xfd501cf28ef9a23bab6f78676de123dfc705415b",
+  "lpCalculationsLibrary": "0xc8E84738c2B4682D0BABF82E28C49D154C5753A4"
 }

@@ -212,8 +212,14 @@ contract VaultCore is SharedStorage, OwnableUpgradeable, UUPSUpgradeable {
             
             // LP tokens are handled separately after the loop
             
-            // Add to total (1:1 ratio assumed for now)
-            total += lstBalance;
+            // Apply rate provider for stKAIA (index 3), others are 1:1
+            if (i == 3) {
+                // stKAIA uses rate provider for proper valuation
+                total += LPCalculations.applyRateProvider(lstBalance, i);
+            } else {
+                // Other LSTs (wKoKAIA, wGCKAIA, wstKLAY) are 1:1 after unwrapping
+                total += lstBalance;
+            }
         }
         
         // Add LP token value (all LSTs share same BPT at index 0)

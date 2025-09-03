@@ -198,6 +198,54 @@ The script will:
 3. Recover them to VaultCore (owner-only operation)
 4. Verify successful recovery
 
+### LP Token Valuation Tools
+
+#### Query LP Exit Values
+Analyze LP token values and potential exit amounts using Balancer's queryExit:
+
+```bash
+# Query with VaultCore's current LP balance
+npx hardhat run scripts/queryLPExit.js --network kaia
+
+# Query with custom LP amount
+LP_AMOUNT=10 npx hardhat run scripts/queryLPExit.js --network kaia
+
+# Query specific token exit (wstKLAY, stKAIA, SKLAY, wGCKAIA, wKoKAIA)
+EXIT_TOKEN=stKAIA npx hardhat run scripts/queryLPExit.js --network kaia
+
+# Query all tokens (default)
+EXIT_TOKEN=all npx hardhat run scripts/queryLPExit.js --network kaia
+
+# Specify profile (stable/balanced)
+PROFILE=balanced npx hardhat run scripts/queryLPExit.js --network kaia
+```
+
+The script provides:
+- Single-token exit values for each LST
+- Unwrapped KAIA values with rate provider calculations
+- Average KAIA value and per-BPT rates
+- Comparison with internal LP calculations
+
+#### Query BPT to WKAIA Swap
+Check BPT→WKAIA swap rates through the dedicated Balancer pool:
+
+```bash
+# Query with VaultCore's current BPT balance
+npx hardhat run scripts/queryBPTSwap.js --network kaia
+
+# Query with custom BPT amount
+BPT_AMOUNT=10 npx hardhat run scripts/queryBPTSwap.js --network kaia
+
+# Specify profile (stable/balanced)
+PROFILE=balanced npx hardhat run scripts/queryBPTSwap.js --network kaia
+```
+
+The script provides:
+- Direct BPT→WKAIA swap rates
+- Exchange rate calculations (WKAIA/BPT)
+- Alternative to proportional exits for Composable Stable Pools
+- Comparison with single-token exit values
+
 ## Important Notes
 
 ⚠️ **SwapContract is FINALIZED**: The SwapContract has been thoroughly tested with all 4 LSTs and should NOT be modified.
